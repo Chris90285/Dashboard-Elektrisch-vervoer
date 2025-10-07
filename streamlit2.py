@@ -71,7 +71,7 @@ if page == "⚡️ Laadpalen":
     center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
     # ---------------------
-    # 🔌 API-call per provincie (met caching)
+    # 🔌 API-call per regio (met caching)
     # ---------------------
     @st.cache_data(ttl=86400)
     def get_laadpalen_data(lat, lon, radius):
@@ -92,13 +92,11 @@ if page == "⚡️ Laadpalen":
         data = response.json()
         return pd.json_normalize(data)
 
+    # Eerste load (provincie-niveau)
     with st.spinner(f"🔌 Laad laadpalen voor {provincie_keuze}..."):
         Laadpalen = get_laadpalen_data(center_lat, center_lon, radius_km)
 
-    # Zet JSON om naar DataFrame
     Laadpalen = Laadpalen.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
-
-    # Pak de eerste 'Connection' per laadpaal
     connections = pd.json_normalize(
         Laadpalen["Connections"].apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else {})
     )
@@ -106,12 +104,12 @@ if page == "⚡️ Laadpalen":
     Laadpalen.reset_index(drop=True, inplace=True)
 
     # ---------------------
-    # 🗺️ Kaart maken met toggle voor popups
+    # 🗺️ Kaart maken met "slim laden"
     # ---------------------
     st.markdown("### 🗺️ Kaartweergave")
     toon_popups = st.checkbox("Toon details bij laadpalen (kan trager zijn)", value=False)
 
-    # behoud de laatst bekende mapstate
+    # Sla mapstate op
     if "map_state" not in st.session_state:
         st.session_state["map_state"] = {
             "lat": center_lat,
@@ -119,41 +117,75 @@ if page == "⚡️ Laadpalen":
             "zoom": 8 if provincie_keuze == "Heel Nederland" else 10,
         }
 
-    # gebruik de huidige mapstate
     m = folium.Map(
         location=[st.session_state["map_state"]["lat"], st.session_state["map_state"]["lon"]],
         zoom_start=st.session_state["map_state"]["zoom"],
         tiles="OpenStreetMap"
     )
 
-    if toon_popups:
-        # 🔹 Langzamer, maar met details
-        marker_cluster = MarkerCluster().add_to(m)
-        for _, row in Laadpalen.iterrows():
-            popup = f"""
-            <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
-            {row.get('AddressInfo.AddressLine1', '')}<br>
-            {row.get('AddressInfo.Town', '')}<br>
-            Kosten: {row.get('UsageCost', 'N/B')}<br>
-            Vermogen: {row.get('PowerKW', 'N/B')} kW
-            """
-            folium.Marker(
-                location=[row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]],
-                popup=folium.Popup(popup, max_width=300),
-                icon=folium.Icon(color="green", icon="bolt", prefix="fa")
-            ).add_to(marker_cluster)
-    else:
-        # 🔹 Supersnel, zonder popups
-        FastMarkerCluster(
-            data=list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
-        ).add_to(m)
+    # ---------------------
+    # ⚡️ FAST MODE (geen popups)
+    # ---------------------
+    FastMarkerCluster(
+        data=list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
+    ).add_to(m)
 
-    # toon kaart en sla positie op
+    # Toon kaart & lees zoom-level
     map_data = st_folium(m, width=800, height=600)
+
     if map_data and "center" in map_data and "zoom" in map_data:
         st.session_state["map_state"]["lat"] = map_data["center"]["lat"]
         st.session_state["map_state"]["lon"] = map_data["center"]["lng"]
         st.session_state["map_state"]["zoom"] = map_data["zoom"]
+
+    # ---------------------
+    # 🧠 Detailmodus: enkel ophalen als ingezoomd
+    # ---------------------
+    if toon_popups:
+        zoom = st.session_state["map_state"]["zoom"]
+        lat = st.session_state["map_state"]["lat"]
+        lon = st.session_state["map_state"]["lon"]
+
+        # Safety: alleen laden bij voldoende zoom
+        if zoom < 8:
+            st.warning("📉 Je bent te ver uitgezoomd om details te laden. Zoom verder in.")
+        else:
+            # Dynamische straal obv zoomniveau
+            if zoom >= 12:
+                radius = 10
+            elif zoom >= 10:
+                radius = 30
+            else:
+                radius = 50
+
+            st.info(f"📡 Detaildata ophalen (straal {radius} km rond huidig gebied)...")
+            with st.spinner("🔍 Ophalen details..."):
+                detail_data = get_laadpalen_data(lat, lon, radius)
+                detail_data = detail_data.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
+
+                connections = pd.json_normalize(
+                    detail_data["Connections"].apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else {})
+                )
+                detail_data = pd.concat([detail_data, connections], axis=1)
+
+                detail_map = folium.Map(location=[lat, lon], zoom_start=zoom, tiles="OpenStreetMap")
+                marker_cluster = MarkerCluster().add_to(detail_map)
+
+                for _, row in detail_data.iterrows():
+                    popup = f"""
+                    <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
+                    {row.get('AddressInfo.AddressLine1', '')}<br>
+                    {row.get('AddressInfo.Town', '')}<br>
+                    Kosten: {row.get('UsageCost', 'N/B')}<br>
+                    Vermogen: {row.get('PowerKW', 'N/B')} kW
+                    """
+                    folium.Marker(
+                        location=[row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]],
+                        popup=folium.Popup(popup, max_width=300),
+                        icon=folium.Icon(color="green", icon="bolt", prefix="fa")
+                    ).add_to(marker_cluster)
+
+                st_folium(detail_map, width=800, height=600)
 
 # ------------------- Pagina 2 --------------------------
 # ------------------------------------------------------
