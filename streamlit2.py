@@ -14,30 +14,7 @@ import matplotlib.pyplot as plt
 import folium
 import requests
 from streamlit_folium import st_folium
-
-# ------------------ Data inladen ----------------------
-# ------------------------------------------------------
-url = "https://api.openchargemap.io/v3/poi/"
-params = {
-    "output": "json",
-    "countrycode": "NL",
-    "maxresults": 200,
-    "compact": True,
-    "verbose": False,
-    "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
-}
-
-response = requests.get(url, params=params)
-data = response.json()
-
-# Zet de JSON om naar DataFrame
-Laadpalen = pd.json_normalize(data)
-
-# Pak de eerste 'Connection' per laadpaal (anders krijg je nested JSON)
-connections = pd.json_normalize(
-    Laadpalen["Connections"].apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else {})
-)
-Laadpalen = pd.concat([Laadpalen, connections], axis=1)
+from folium.plugins import MarkerCluster
 
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
@@ -55,11 +32,7 @@ with st.sidebar:
     )
 
     st.write("")
-
-    # Verwijderd: st.image("placeholder_afbeelding.png")
-    # In plaats daarvan gewoon een nette tekst
-    st.info("🔋 OpenChargeMap Nederland API-data geladen")
-
+    st.info("🔋 OpenChargeMap Nederland API-data wordt per provincie geladen")
     st.markdown("---")
     st.write("Voor het laatst geüpdatet op:")
     st.write("*07 okt 2025*")
@@ -75,14 +48,68 @@ if page == "⚡️ Laadpalen":
     st.write("Gebruik deze pagina voor een kort overzicht of KPI’s over laadpalen.")
     st.markdown("---")
 
-    # Gebruik de Laadpalen DataFrame (al gefilterd op Nederland)
-    df = Laadpalen.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude']).copy()
+    # ======================
+    # 🔍 FILTER: Provincie
+    # ======================
+    provincies = {
+        "Heel Nederland": [52.1, 5.3, 200],  # radius groot genoeg om heel NL te dekken
+        "Groningen": [53.2194, 6.5665, 60],
+        "Friesland": [53.1642, 5.7818, 60],
+        "Drenthe": [52.9476, 6.6231, 60],
+        "Overijssel": [52.4380, 6.5010, 60],
+        "Flevoland": [52.5270, 5.5953, 60],
+        "Gelderland": [52.0452, 5.8712, 60],
+        "Utrecht": [52.0907, 5.1214, 60],
+        "Noord-Holland": [52.5206, 4.7885, 60],
+        "Zuid-Holland": [52.0116, 4.3571, 60],
+        "Zeeland": [51.4940, 3.8497, 60],
+        "Noord-Brabant": [51.5730, 5.0670, 60],
+        "Limburg": [51.2490, 5.9330, 60],
+    }
 
-    # Basiskaart centreren op Nederland
-    m = folium.Map(location=[52.1, 5.3], zoom_start=8, tiles="OpenStreetMap")
+    provincie_keuze = st.selectbox("📍 Kies een provincie", provincies.keys(), index=0)
+    center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
-    # Voeg markers toe
-    for _, row in df.iterrows():
+    # ---------------------
+    # 🔌 API-call per provincie
+    # ---------------------
+    url = "https://api.openchargemap.io/v3/poi/"
+    params = {
+        "output": "json",
+        "countrycode": "NL",
+        "latitude": center_lat,
+        "longitude": center_lon,
+        "distance": radius_km,
+        "maxresults": 5000,
+        "compact": True,
+        "verbose": False,
+        "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
+    }
+
+    with st.spinner(f"🔌 Laad laadpalen voor {provincie_keuze}..."):
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+    # Zet JSON om naar DataFrame
+    Laadpalen = pd.json_normalize(data)
+    Laadpalen = Laadpalen.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
+
+    # Pak de eerste 'Connection' per laadpaal
+    connections = pd.json_normalize(
+        Laadpalen["Connections"].apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else {})
+    )
+    Laadpalen = pd.concat([Laadpalen, connections], axis=1)
+    Laadpalen.reset_index(drop=True, inplace=True)
+
+    # ---------------------
+    # 🗺️ Kaart maken
+    # ---------------------
+    zoom_start = 8 if provincie_keuze == "Heel Nederland" else 10
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start, tiles="OpenStreetMap")
+    marker_cluster = MarkerCluster().add_to(m)
+
+    for _, row in Laadpalen.iterrows():
         popup = f"""
         <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
         {row.get('AddressInfo.AddressLine1', '')}<br>
@@ -94,10 +121,9 @@ if page == "⚡️ Laadpalen":
             location=[row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]],
             popup=folium.Popup(popup, max_width=300),
             icon=folium.Icon(color="green", icon="bolt", prefix="fa")
-        ).add_to(m)
+        ).add_to(marker_cluster)
 
-    # Toon kaart in Streamlit
-    st_folium(m, width=700, height=600)
+    st_folium(m, width=800, height=600)
 
 # ------------------- Pagina 2 --------------------------
 # ------------------------------------------------------
