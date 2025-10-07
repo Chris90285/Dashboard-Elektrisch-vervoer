@@ -8,3 +8,4 @@ folium
 requests
 scikit-learn
 seaborn
+streamlit-folium
