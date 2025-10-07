@@ -49,7 +49,7 @@ if page == "⚡️ Laadpalen":
     st.markdown("---")
 
     # ======================
-    # FILTER: Provincie
+    # 🔍 FILTER: Provincie
     # ======================
     provincies = {
         "Heel Nederland": [52.1, 5.3, 200],  # radius groot genoeg om heel NL te dekken
@@ -71,10 +71,9 @@ if page == "⚡️ Laadpalen":
     center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
     # ---------------------
-    # API-call per provincie (nu met caching)
+    # 🔌 API-call per provincie (met caching)
     # ---------------------
-
-    @st.cache_data(ttl=86400)  # ✅ cache voor 24 uur
+    @st.cache_data(ttl=86400)
     def get_laadpalen_data(lat, lon, radius):
         url = "https://api.openchargemap.io/v3/poi/"
         params = {
@@ -107,17 +106,54 @@ if page == "⚡️ Laadpalen":
     Laadpalen.reset_index(drop=True, inplace=True)
 
     # ---------------------
-    # Kaart maken met FastMarkerCluster
+    # 🗺️ Kaart maken met toggle voor popups
     # ---------------------
-    zoom_start = 8 if provincie_keuze == "Heel Nederland" else 10
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start, tiles="OpenStreetMap")
+    st.markdown("### 🗺️ Kaartweergave")
+    toon_popups = st.checkbox("Toon details bij laadpalen (kan trager zijn)", value=False)
 
-    # ✅ Gebruik FastMarkerCluster i.p.v. MarkerCluster
-    FastMarkerCluster(
-        data=list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
-    ).add_to(m)
+    # behoud de laatst bekende mapstate
+    if "map_state" not in st.session_state:
+        st.session_state["map_state"] = {
+            "lat": center_lat,
+            "lon": center_lon,
+            "zoom": 8 if provincie_keuze == "Heel Nederland" else 10,
+        }
 
-    st_folium(m, width=800, height=600)
+    # gebruik de huidige mapstate
+    m = folium.Map(
+        location=[st.session_state["map_state"]["lat"], st.session_state["map_state"]["lon"]],
+        zoom_start=st.session_state["map_state"]["zoom"],
+        tiles="OpenStreetMap"
+    )
+
+    if toon_popups:
+        # 🔹 Langzamer, maar met details
+        marker_cluster = MarkerCluster().add_to(m)
+        for _, row in Laadpalen.iterrows():
+            popup = f"""
+            <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
+            {row.get('AddressInfo.AddressLine1', '')}<br>
+            {row.get('AddressInfo.Town', '')}<br>
+            Kosten: {row.get('UsageCost', 'N/B')}<br>
+            Vermogen: {row.get('PowerKW', 'N/B')} kW
+            """
+            folium.Marker(
+                location=[row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]],
+                popup=folium.Popup(popup, max_width=300),
+                icon=folium.Icon(color="green", icon="bolt", prefix="fa")
+            ).add_to(marker_cluster)
+    else:
+        # 🔹 Supersnel, zonder popups
+        FastMarkerCluster(
+            data=list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
+        ).add_to(m)
+
+    # toon kaart en sla positie op
+    map_data = st_folium(m, width=800, height=600)
+    if map_data and "center" in map_data and "zoom" in map_data:
+        st.session_state["map_state"]["lat"] = map_data["center"]["lat"]
+        st.session_state["map_state"]["lon"] = map_data["center"]["lng"]
+        st.session_state["map_state"]["zoom"] = map_data["zoom"]
 
 # ------------------- Pagina 2 --------------------------
 # ------------------------------------------------------
