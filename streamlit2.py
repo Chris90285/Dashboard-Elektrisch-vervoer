@@ -13,6 +13,7 @@ import altair as alt
 import matplotlib.pyplot as plt
 import folium
 import requests
+from streamlit_folium import st_folium
 # ------------------ Data inladen ----------------------
 # ------------------------------------------------------
 
@@ -66,18 +67,15 @@ if page == "⚡️ Laadpalen":
     st.write("Gebruik deze pagina voor een kort overzicht of KPI’s over laadpalen.")
     st.markdown("---")
 
-    # 📊 Dataframe 'Laadpalen' wordt gebruikt (al gefilterd op Nederland)
-    df = Laadpalen.copy()
+    # Gebruik de Laadpalen DataFrame (al gefilterd op Nederland)
+    df = Laadpalen.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude']).copy()
 
-    # Verwijder rijen zonder coördinaten
-    df = df.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
+    # Basiskaart centreren op Nederland
+    m = folium.Map(location=[52.1, 5.3], zoom_start=8, tiles="OpenStreetMap")
 
-    # 🌍 Maak een interactieve kaart met Folium
-    m = folium.Map(location=[52.1, 5.3], zoom_start=8, tiles='OpenStreetMap')
-
-    # Voeg markers toe voor elke laadpaal
+    # Voeg markers toe
     for _, row in df.iterrows():
-        popup_text = f"""
+        popup = f"""
         <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
         {row.get('AddressInfo.AddressLine1', '')}<br>
         {row.get('AddressInfo.Town', '')}<br>
@@ -85,13 +83,13 @@ if page == "⚡️ Laadpalen":
         Vermogen: {row.get('PowerKW', 'N/B')} kW
         """
         folium.Marker(
-            location=[row['AddressInfo.Latitude'], row['AddressInfo.Longitude']],
-            popup=folium.Popup(popup_text, max_width=300),
+            location=[row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]],
+            popup=folium.Popup(popup, max_width=300),
             icon=folium.Icon(color="green", icon="bolt", prefix="fa")
         ).add_to(m)
 
-    # 🖼️ Toon de kaart in Streamlit
-    st.components.v1.html(m._repr_html_(), height=600)
+    # Toon kaart in Streamlit
+    st_folium(m, width=700, height=600)
 
 
 
