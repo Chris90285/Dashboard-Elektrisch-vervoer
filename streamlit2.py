@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import folium
 import requests
 from streamlit_folium import st_folium
+
 # ------------------ Data inladen ----------------------
 # ------------------------------------------------------
 url = "https://api.openchargemap.io/v3/poi/"
@@ -54,7 +55,11 @@ with st.sidebar:
     )
 
     st.write("")
-    st.image("placeholder_afbeelding.png", use_container_width=True)
+
+    # Verwijderd: st.image("placeholder_afbeelding.png")
+    # In plaats daarvan gewoon een nette tekst
+    st.info("🔋 OpenChargeMap Nederland API-data geladen")
+
     st.markdown("---")
     st.write("Voor het laatst geüpdatet op:")
     st.write("*07 okt 2025*")
@@ -94,27 +99,18 @@ if page == "⚡️ Laadpalen":
     # Toon kaart in Streamlit
     st_folium(m, width=700, height=600)
 
-
-
 # ------------------- Pagina 2 --------------------------
 # ------------------------------------------------------
 elif page == "🚘 Voertuigen":
-    st.markdown("##Overzicht Elektrische Voertuigen")
+    st.markdown("## Overzicht Elektrische Voertuigen")
     st.write("Gebruik deze pagina voor analyses over elektrische voertuigen.")
     st.markdown("---")
-
-    # 👉 Voeg hier je grafieken en analyses toe
     st.write("🔧 Voeg hier je visualisaties toe.")
 
 # ------------------- Pagina 3 --------------------------
 # ------------------------------------------------------
 elif page == "📊 Voorspellend model":
-    st.markdown("##Voorspellend Model")
+    st.markdown("## Voorspellend Model")
     st.write("Gebruik deze pagina voor modellen en prognoses over laad- en voertuiggedrag.")
     st.markdown("---")
-
-    # 👉 Voeg hier vergelijkingstabellen/grafieken of ML-modellen toe
     st.write("🔧 Voeg hier je voorspellend model of simulatie toe.")
-
-# ======================================================
-
