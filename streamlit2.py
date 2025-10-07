@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import folium
 import requests
 from streamlit_folium import st_folium
-from folium.plugins import MarkerCluster
+from folium.plugins import MarkerCluster, FastMarkerCluster
 
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
@@ -49,7 +49,7 @@ if page == "⚡️ Laadpalen":
     st.markdown("---")
 
     # ======================
-    # 🔍 FILTER: Provincie
+    # FILTER: Provincie
     # ======================
     provincies = {
         "Heel Nederland": [52.1, 5.3, 200],  # radius groot genoeg om heel NL te dekken
@@ -71,28 +71,32 @@ if page == "⚡️ Laadpalen":
     center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
     # ---------------------
-    # 🔌 API-call per provincie
+    # API-call per provincie (nu met caching)
     # ---------------------
-    url = "https://api.openchargemap.io/v3/poi/"
-    params = {
-        "output": "json",
-        "countrycode": "NL",
-        "latitude": center_lat,
-        "longitude": center_lon,
-        "distance": radius_km,
-        "maxresults": 5000,
-        "compact": True,
-        "verbose": False,
-        "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
-    }
 
-    with st.spinner(f"🔌 Laad laadpalen voor {provincie_keuze}..."):
+    @st.cache_data(ttl=86400)  # ✅ cache voor 24 uur
+    def get_laadpalen_data(lat, lon, radius):
+        url = "https://api.openchargemap.io/v3/poi/"
+        params = {
+            "output": "json",
+            "countrycode": "NL",
+            "latitude": lat,
+            "longitude": lon,
+            "distance": radius,
+            "maxresults": 5000,
+            "compact": True,
+            "verbose": False,
+            "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
+        }
         response = requests.get(url, params=params)
         response.raise_for_status()
         data = response.json()
+        return pd.json_normalize(data)
+
+    with st.spinner(f"🔌 Laad laadpalen voor {provincie_keuze}..."):
+        Laadpalen = get_laadpalen_data(center_lat, center_lon, radius_km)
 
     # Zet JSON om naar DataFrame
-    Laadpalen = pd.json_normalize(data)
     Laadpalen = Laadpalen.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
 
     # Pak de eerste 'Connection' per laadpaal
@@ -103,25 +107,15 @@ if page == "⚡️ Laadpalen":
     Laadpalen.reset_index(drop=True, inplace=True)
 
     # ---------------------
-    # 🗺️ Kaart maken
+    # Kaart maken met FastMarkerCluster
     # ---------------------
     zoom_start = 8 if provincie_keuze == "Heel Nederland" else 10
     m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start, tiles="OpenStreetMap")
-    marker_cluster = MarkerCluster().add_to(m)
 
-    for _, row in Laadpalen.iterrows():
-        popup = f"""
-        <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
-        {row.get('AddressInfo.AddressLine1', '')}<br>
-        {row.get('AddressInfo.Town', '')}<br>
-        Kosten: {row.get('UsageCost', 'N/B')}<br>
-        Vermogen: {row.get('PowerKW', 'N/B')} kW
-        """
-        folium.Marker(
-            location=[row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]],
-            popup=folium.Popup(popup, max_width=300),
-            icon=folium.Icon(color="green", icon="bolt", prefix="fa")
-        ).add_to(marker_cluster)
+    # ✅ Gebruik FastMarkerCluster i.p.v. MarkerCluster
+    FastMarkerCluster(
+        data=list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
+    ).add_to(m)
 
     st_folium(m, width=800, height=600)
 
