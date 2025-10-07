@@ -16,25 +16,28 @@ import requests
 from streamlit_folium import st_folium
 # ------------------ Data inladen ----------------------
 # ------------------------------------------------------
+url = "https://api.openchargemap.io/v3/poi/"
+params = {
+    "output": "json",
+    "countrycode": "NL",
+    "maxresults": 200,
+    "compact": True,
+    "verbose": False,
+    "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
+}
 
-#Inladen API (key: bbc1c977-6228-42fc-b6af-5e5f71be11a5)
-response = requests.get("https://api.openchargemap.io/v3/poi/?output=json&countrycode=NL&maxresults=100&compact=true&verbose=false&key=bbc1c977-6228-42fc-b6af-5e5f71be11a5")
+response = requests.get(url, params=params)
+data = response.json()
 
-#Omzetten naar dictionary
-responsejson  = response.json()
-responsejson
-response.json()
-#Dataframe bevat kolom die een list zijn. 
-#Met json_normalize zet je de eerste kolom om naar losse kolommen
-Laadpalen = pd.json_normalize(response.json())
-#Daarna nog handmatig kijken welke kolommen over zijn in dit geval Connections
-#Kijken naar eerst laadpaal op de locatie
-#Kan je uitpakken middels:
-df4 = pd.json_normalize(Laadpalen.Connections)
-df5 = pd.json_normalize(df4[0])
-df5.head()
-#Bestanden samenvoegen
-Laadpalen = pd.concat([Laadpalen, df5], axis=1)
+# Zet de JSON om naar DataFrame
+Laadpalen = pd.json_normalize(data)
+
+# Pak de eerste 'Connection' per laadpaal (anders krijg je nested JSON)
+connections = pd.json_normalize(
+    Laadpalen["Connections"].apply(lambda x: x[0] if isinstance(x, list) and len(x) > 0 else {})
+)
+Laadpalen = pd.concat([Laadpalen, connections], axis=1)
+
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
 with st.sidebar:
