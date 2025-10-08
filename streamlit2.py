@@ -230,7 +230,7 @@ if page == "⚡️ Laadpalen":
         # ---- Dynamische grafiek ----
         if keuze == "Aantal laadpalen per provincie":
             fig = px.bar(df_agg, x="Provincie", y="Aantal_palen", title="Aantal laadpalen per provincie")
-        else keuze == "Gemiddelde kosten per provincie":
+        elif keuze == "Gemiddelde kosten per provincie":
             fig = px.bar(df_agg, x="Provincie", y="Gemiddelde_kosten", title="Gemiddelde kosten per provincie (€ per kWh)")
 
         fig.update_layout(xaxis_title="Provincie", yaxis_title="", showlegend=False)
