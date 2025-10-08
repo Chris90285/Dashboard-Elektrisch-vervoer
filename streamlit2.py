@@ -96,7 +96,13 @@ if page == "⚡️ Laadpalen":
         return df
 
     with st.spinner(f" Laad laadpalen voor {provincie_keuze}..."):
-        Laadpalen = get_laadpalen_data(center_lat, center_lon, radius_km)
+        df = get_laadpalen_data(center_lat, center_lon, radius_km)
+
+        # 🔒 Filter: alleen laadpalen binnen de gekozen provincie
+        if provincie_keuze != "Heel Nederland":
+            Laadpalen = df[df["AddressInfo.StateOrProvince"].str.contains(provincie_keuze, case=False, na=False)]
+        else:
+            Laadpalen = df
 
     # ---------------------
     # Standaard aantal laadpalen
@@ -108,7 +114,6 @@ if page == "⚡️ Laadpalen":
     # ---------------------
     st.write(f"📍 Provincie: **{provincie_keuze}** — gevonden laadpalen: **{len(Laadpalen)}**")
     st.write(f"Standaardmodus toont maximaal **{MAX_DEFAULT}** laadpalen & popups.")
-    st.write("Toon alle laadpalen (zonder popups).")
 
     # Checkbox: alle punten met FastMarkerCluster 
     laad_alle = st.checkbox("Laad alle laadpalen (geen popups)", value=False)
@@ -155,7 +160,7 @@ if page == "⚡️ Laadpalen":
                 Vermogen: {row.get('PowerKW', 'N/B')} kW
                 """
 
-                # Bliksem icoon
+                # ✅ Bliksem icoon voor laadpalen
                 icon = folium.Icon(color="green", icon="bolt", prefix="fa")
 
                 folium.Marker(
