@@ -510,3 +510,4 @@ elif page == "📊 Voorspellend model":
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
+    plt.show()
