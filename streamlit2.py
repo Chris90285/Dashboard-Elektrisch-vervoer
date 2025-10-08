@@ -16,6 +16,7 @@ import requests
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster, FastMarkerCluster
 from typing import Tuple
+import re  # 👈 nieuw: voor parsing van UsageCost
 
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
@@ -115,43 +116,25 @@ if page == "⚡️ Laadpalen":
     # ---------------------
     st.write(f"Provincie: **{provincie_keuze}** — gevonden laadpalen: **{len(Laadpalen)}**")
 
-    # Checkbox: alle punten met FastMarkerCluster 
     laad_alle = st.checkbox("Laad alle laadpalen (geen popups)", value=False)
 
-    # Basemap
     if len(Laadpalen) == 0:
         st.warning("Geen laadpalen gevonden voor deze locatie/provincie.")
         m = folium.Map(location=[center_lat, center_lon], zoom_start=8, tiles="OpenStreetMap")
         st_folium(m, width=900, height=650)
     else:
         start_zoom = 8 if provincie_keuze == "Heel Nederland" else 10
-        m = folium.Map(
-            location=[center_lat, center_lon],
-            zoom_start=start_zoom,
-            tiles="OpenStreetMap"
-        )
+        m = folium.Map(location=[center_lat, center_lon], zoom_start=start_zoom, tiles="OpenStreetMap")
 
         if laad_alle:
-            # ------------------------------------------------------------
-            # SNEL: alle punten zonder popups
-            # ------------------------------------------------------------
             coords = list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
             FastMarkerCluster(data=coords).add_to(m)
-            st.info(f"Snelmodus: alle {len(coords)} laadpalen worden getoond (geen popups of individuele iconen voor performance).")
-            # Let op: FastMarkerCluster gebruikt eenvoudige markers om performance te waarborgen.
+            st.info(f"Snelmodus: {len(coords)} laadpalen zonder popups.")
         else:
-            # ------------------------------------------------------------
-            # DETAIL: toon alleen (MAX_DEFAULT) met popups
-            # ------------------------------------------------------------
-            if len(Laadpalen) > MAX_DEFAULT:
-                subset_df = Laadpalen.sample(n=MAX_DEFAULT, random_state=1).reset_index(drop=True)
-            else:
-                subset_df = Laadpalen.reset_index(drop=True)
-
+            subset_df = Laadpalen.sample(n=min(len(Laadpalen), MAX_DEFAULT), random_state=1).reset_index(drop=True)
             marker_cluster = MarkerCluster().add_to(m)
             for _, row in subset_df.iterrows():
-                lat = row["AddressInfo.Latitude"]
-                lon = row["AddressInfo.Longitude"]
+                lat, lon = row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]
                 popup = f"""
                 <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
                 {row.get('AddressInfo.AddressLine1', '')}<br>
@@ -159,21 +142,69 @@ if page == "⚡️ Laadpalen":
                 Kosten: {row.get('UsageCost', 'N/B')}<br>
                 Vermogen: {row.get('PowerKW', 'N/B')} kW
                 """
-
-                # Bliksem icoon 
                 icon = folium.Icon(color="green", icon="bolt", prefix="fa")
-
-                folium.Marker(
-                    location=[lat, lon],
-                    popup=folium.Popup(popup, max_width=300),
-                    icon=icon
-                ).add_to(marker_cluster)
+                folium.Marker(location=[lat, lon], popup=folium.Popup(popup, max_width=300), icon=icon).add_to(marker_cluster)
 
             st.success(f"Detailmodus: {len(subset_df)} laadpalen met popups geladen.")
 
-        # Render de kaart
         st_folium(m, width=900, height=650, returned_objects=["center", "zoom"])
     st.markdown("<small>**Bron: openchargemap.org**</small>", unsafe_allow_html=True) 
+
+    # ======================================================
+    # ====== INTERACTIEVE GRAFIEK: Verdeling laadpalen =====
+    # ======================================================
+    st.markdown("---")
+    st.subheader("📊 Analyse van laadpalen per provincie (alle data)")
+
+    # Gebruik alle laadpalen (Heel Nederland) voor deze grafiek
+    df_all = get_laadpalen_data(52.1, 5.3, 200)
+
+    # ---- Data opschonen ----
+    def parse_cost(value):
+        """Haalt numerieke waarde uit kosten-string"""
+        if isinstance(value, str):
+            match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
+            return float(match.group(1)) if match else np.nan
+        return np.nan
+
+    df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
+    df_all["PowerKW"] = pd.to_numeric(df_all["PowerKW"], errors="coerce")
+
+    # ---- Aggregatie per provincie ----
+    df_agg = (
+        df_all.groupby("AddressInfo.StateOrProvince")
+        .agg(
+            Aantal_palen=("ID", "count"),
+            Gemiddelde_kosten=("UsageCostClean", "mean"),
+            Gemiddeld_vermogen=("PowerKW", "mean")
+        )
+        .reset_index()
+        .rename(columns={"AddressInfo.StateOrProvince": "Provincie"})
+        .sort_values("Aantal_palen", ascending=False)
+    )
+
+    keuze = st.selectbox(
+        "📈 Kies wat je wilt visualiseren:",
+        ["Aantal laadpalen", "Gemiddelde kosten per kWh", "Gemiddeld vermogen (kW)"]
+    )
+
+    if keuze == "Aantal laadpalen":
+        y_col, title = "Aantal_palen", "Aantal laadpalen per provincie"
+    elif keuze == "Gemiddelde kosten per kWh":
+        y_col, title = "Gemiddelde_kosten", "Gemiddelde kosten per kWh per provincie"
+    else:
+        y_col, title = "Gemiddeld_vermogen", "Gemiddeld laadvermogen (kW) per provincie"
+
+    fig = px.bar(
+        df_agg,
+        x="Provincie",
+        y=y_col,
+        color="Provincie",
+        title=title,
+        text_auto=True
+    )
+    fig.update_layout(xaxis_title="Provincie", yaxis_title="", showlegend=False, template="plotly_white")
+    st.plotly_chart(fig, use_container_width=True)
 
 # ------------------- Pagina 2 --------------------------
 # ------------------------------------------------------
