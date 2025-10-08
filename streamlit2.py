@@ -40,7 +40,6 @@ with st.sidebar:
 # ======================================================
 
 # ------------------- Pagina 1 --------------------------
-# ------------------------------------------------------
 if page == "⚡️ Laadpalen":
     st.markdown("## Kaart laadpalen")
     st.write("Op deze pagina is een kaart te zien met laadpalen in Nederland.")
@@ -94,7 +93,6 @@ if page == "⚡️ Laadpalen":
         df = df.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
         return df
 
-    # Dit gebruiken we voor de grafiek met laadpalen
     @st.cache_data(ttl=86400)
     def get_all_laadpalen_nederland() -> pd.DataFrame:
         """Haalt laadpalen van heel Nederland op (voor grafieken)."""
@@ -118,9 +116,8 @@ if page == "⚡️ Laadpalen":
     # ---------------------
     with st.spinner(f" Laad laadpalen voor {provincie_keuze}..."):
         df = get_laadpalen_data(center_lat, center_lon, radius_km)
-        df_all = get_all_laadpalen_nederland()  # <--- volledig land
+        df_all = get_all_laadpalen_nederland()
 
-        # 🔒 Filter: alleen laadpalen binnen de gekozen provincie
         if provincie_keuze != "Heel Nederland":
             Laadpalen = df[df["AddressInfo.StateOrProvince"].str.contains(provincie_keuze, case=False, na=False)]
         else:
@@ -166,7 +163,7 @@ if page == "⚡️ Laadpalen":
     st.markdown("<small>**Bron: openchargemap.org**</small>", unsafe_allow_html=True)
 
     # ======================================================
-    # GRAFIEK: Verdeling laadpalen in Nederland
+    # 📊 GRAFIEK: Verdeling laadpalen in Nederland
     # ======================================================
     st.markdown("---")
     st.markdown("## 📊 Verdeling laadpalen in Nederland")
@@ -190,16 +187,38 @@ if page == "⚡️ Laadpalen":
         else:
             df_all["PowerKW_clean"] = np.nan
 
+        # ---- Provincienamen mappen ----
+        provincie_mapping = {
+            "Groningen": "Groningen",
+            "Friesland": "Friesland",
+            "Fryslân": "Friesland",
+            "Drenthe": "Drenthe",
+            "Overijssel": "Overijssel",
+            "Flevoland": "Flevoland",
+            "Gelderland": "Gelderland",
+            "Utrecht": "Utrecht",
+            "Noord-Holland": "Noord-Holland",
+            "North Holland": "Noord-Holland",
+            "Zuid-Holland": "Zuid-Holland",
+            "South Holland": "Zuid-Holland",
+            "Zeeland": "Zeeland",
+            "Noord-Brabant": "Noord-Brabant",
+            "North Brabant": "Noord-Brabant",
+            "Limburg": "Limburg"
+        }
+
+        df_all["Provincie"] = df_all["AddressInfo.StateOrProvince"].map(provincie_mapping)
+        df_all = df_all[df_all["Provincie"].isin(list(provincies.keys()))]
+
         # ---- Aggregatie ----
         df_agg = (
-            df_all.groupby("AddressInfo.StateOrProvince")
+            df_all.groupby("Provincie")
             .agg(
                 Aantal_palen=("ID", "count"),
                 Gemiddelde_kosten=("UsageCostClean", "mean"),
                 Gemiddeld_vermogen=("PowerKW_clean", "mean")
             )
             .reset_index()
-            .rename(columns={"AddressInfo.StateOrProvince": "Provincie"})
             .sort_values("Aantal_palen", ascending=False)
         )
 
