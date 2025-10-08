@@ -99,19 +99,19 @@ if page == "⚡️ Laadpalen":
         Laadpalen = get_laadpalen_data(center_lat, center_lon, radius_km)
 
     # ---------------------
-    # 🧾 Config: hoeveel standaard laden
+    # Standaard aantal laadpalen
     # ---------------------
-    MAX_DEFAULT = 300  # ⚙️ Pas dit getal aan als je meer/minder wilt laten zien in standaardmodus
+    MAX_DEFAULT = 300  
 
     # ---------------------
-    # 🌍 Kaart genereren
+    # Kaart maken
     # ---------------------
     st.write(f"📍 Provincie: **{provincie_keuze}** — gevonden laadpalen: **{len(Laadpalen)}**")
     st.write(f"Standaardmodus toont maximaal **{MAX_DEFAULT}** laadpalen & popups.")
     st.write("Toon alle laadpalen (zonder popups).")
 
-    # 🔘 Checkbox: alle punten met FastMarkerCluster (snel, geen details)
-    laad_alle = st.checkbox("🔄 Laad alle laadpalen (sneller, geen popups/details)", value=False)
+    # Checkbox: alle punten met FastMarkerCluster 
+    laad_alle = st.checkbox("Laad alle laadpalen (geen popups)", value=False)
 
     # Basemap
     if len(Laadpalen) == 0:
@@ -128,7 +128,7 @@ if page == "⚡️ Laadpalen":
 
         if laad_alle:
             # ------------------------------------------------------------
-            # SNEL: toon ALLE punten met FastMarkerCluster (geen popups/details)
+            # SNEL: alle punten zonder popups
             # ------------------------------------------------------------
             coords = list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
             FastMarkerCluster(data=coords).add_to(m)
@@ -136,10 +136,9 @@ if page == "⚡️ Laadpalen":
             # Let op: FastMarkerCluster gebruikt eenvoudige markers om performance te waarborgen.
         else:
             # ------------------------------------------------------------
-            # DETAIL: toon slechts een subset (MAX_DEFAULT) met popups
+            # DETAIL: toon alleen (MAX_DEFAULT) met popups
             # ------------------------------------------------------------
             if len(Laadpalen) > MAX_DEFAULT:
-                # sample of kies eerste N — hier gebruiken we reproducible sample
                 subset_df = Laadpalen.sample(n=MAX_DEFAULT, random_state=1).reset_index(drop=True)
             else:
                 subset_df = Laadpalen.reset_index(drop=True)
@@ -156,9 +155,7 @@ if page == "⚡️ Laadpalen":
                 Vermogen: {row.get('PowerKW', 'N/B')} kW
                 """
 
-                # ⚡ Gebruik FontAwesome 'bolt' icoon voor laadpunt (standaardmodus)
-                # folium.Icon met prefix='fa' probeert het FontAwesome icoon te tonen.
-                # Als FontAwesome niet geladen is in jouw omgeving, kun je ook DivIcon met HTML gebruiken.
+                # Bliksem icoon
                 icon = folium.Icon(color="green", icon="bolt", prefix="fa")
 
                 folium.Marker(
