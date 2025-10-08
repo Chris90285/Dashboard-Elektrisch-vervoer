@@ -7,16 +7,12 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import numpy as np
-import altair as alt
-import matplotlib.pyplot as plt
 import folium
 import requests
+import re
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster, FastMarkerCluster
-from typing import Tuple
-import re  # 👈 nieuw: voor parsing van UsageCost
 
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
@@ -74,10 +70,11 @@ if page == "⚡️ Laadpalen":
     center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
     # ---------------------
-    # 🔌 API-call met caching
+    # API-call met caching
     # ---------------------
     @st.cache_data(ttl=86400)
     def get_laadpalen_data(lat: float, lon: float, radius: float) -> pd.DataFrame:
+        """Haalt laadpalen binnen een straal op."""
         url = "https://api.openchargemap.io/v3/poi/"
         params = {
             "output": "json",
@@ -97,8 +94,31 @@ if page == "⚡️ Laadpalen":
         df = df.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
         return df
 
+    # Dit gebruiken we voor de grafiek met laadpalen
+    @st.cache_data(ttl=86400)
+    def get_all_laadpalen_nederland() -> pd.DataFrame:
+        """Haalt laadpalen van heel Nederland op (voor grafieken)."""
+        url = "https://api.openchargemap.io/v3/poi/"
+        params = {
+            "output": "json",
+            "countrycode": "NL",
+            "maxresults": 10000,
+            "compact": True,
+            "verbose": False,
+            "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
+        }
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        df = pd.json_normalize(data)
+        return df
+
+    # ---------------------
+    # Data ophalen
+    # ---------------------
     with st.spinner(f" Laad laadpalen voor {provincie_keuze}..."):
         df = get_laadpalen_data(center_lat, center_lon, radius_km)
+        df_all = get_all_laadpalen_nederland()  # <--- volledig land
 
         # 🔒 Filter: alleen laadpalen binnen de gekozen provincie
         if provincie_keuze != "Heel Nederland":
@@ -107,15 +127,10 @@ if page == "⚡️ Laadpalen":
             Laadpalen = df
 
     # ---------------------
-    # Standaard aantal laadpalen
+    # Kaart tonen
     # ---------------------
     MAX_DEFAULT = 300  
-
-    # ---------------------
-    # Kaart maken
-    # ---------------------
     st.write(f"Provincie: **{provincie_keuze}** — gevonden laadpalen: **{len(Laadpalen)}**")
-
     laad_alle = st.checkbox("Laad alle laadpalen (geen popups)", value=False)
 
     if len(Laadpalen) == 0:
@@ -129,7 +144,7 @@ if page == "⚡️ Laadpalen":
         if laad_alle:
             coords = list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
             FastMarkerCluster(data=coords).add_to(m)
-            st.info(f"Snelmodus: {len(coords)} laadpalen zonder popups.")
+            st.info(f"Snelmodus: alle {len(coords)} laadpalen getoond (geen popups).")
         else:
             subset_df = Laadpalen.sample(n=min(len(Laadpalen), MAX_DEFAULT), random_state=1).reset_index(drop=True)
             marker_cluster = MarkerCluster().add_to(m)
@@ -146,68 +161,68 @@ if page == "⚡️ Laadpalen":
                 folium.Marker(location=[lat, lon], popup=folium.Popup(popup, max_width=300), icon=icon).add_to(marker_cluster)
 
             st.success(f"Detailmodus: {len(subset_df)} laadpalen met popups geladen.")
-
         st_folium(m, width=900, height=650, returned_objects=["center", "zoom"])
-    st.markdown("<small>**Bron: openchargemap.org**</small>", unsafe_allow_html=True) 
+
+    st.markdown("<small>**Bron: openchargemap.org**</small>", unsafe_allow_html=True)
 
     # ======================================================
-    # ====== INTERACTIEVE GRAFIEK: Verdeling laadpalen =====
+    # GRAFIEK: Verdeling laadpalen in Nederland
     # ======================================================
     st.markdown("---")
-    st.subheader("📊 Analyse van laadpalen per provincie (alle data)")
+    st.markdown("## 📊 Verdeling laadpalen in Nederland")
 
-    # Gebruik alle laadpalen (Heel Nederland) voor deze grafiek
-    df_all = get_laadpalen_data(52.1, 5.3, 200)
+    if len(df_all) > 0:
+        # ---- Data opschonen ----
+        def parse_cost(value):
+            if isinstance(value, str):
+                match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
+                return float(match.group(1)) if match else np.nan
+            return np.nan
 
-    # ---- Data opschonen ----
-    def parse_cost(value):
-        """Haalt numerieke waarde uit kosten-string"""
-        if isinstance(value, str):
-            match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
-            return float(match.group(1)) if match else np.nan
-        return np.nan
+        df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
 
-    df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
-    df_all["PowerKW"] = pd.to_numeric(df_all["PowerKW"], errors="coerce")
+        if "PowerKW" in df_all.columns:
+            df_all["PowerKW_clean"] = pd.to_numeric(df_all["PowerKW"], errors="coerce")
+        elif "Connections.PowerKW" in df_all.columns:
+            df_all["PowerKW_clean"] = pd.to_numeric(df_all["Connections.PowerKW"], errors="coerce")
+        elif "Connections[0].PowerKW" in df_all.columns:
+            df_all["PowerKW_clean"] = pd.to_numeric(df_all["Connections[0].PowerKW"], errors="coerce")
+        else:
+            df_all["PowerKW_clean"] = np.nan
 
-    # ---- Aggregatie per provincie ----
-    df_agg = (
-        df_all.groupby("AddressInfo.StateOrProvince")
-        .agg(
-            Aantal_palen=("ID", "count"),
-            Gemiddelde_kosten=("UsageCostClean", "mean"),
-            Gemiddeld_vermogen=("PowerKW", "mean")
+        # ---- Aggregatie ----
+        df_agg = (
+            df_all.groupby("AddressInfo.StateOrProvince")
+            .agg(
+                Aantal_palen=("ID", "count"),
+                Gemiddelde_kosten=("UsageCostClean", "mean"),
+                Gemiddeld_vermogen=("PowerKW_clean", "mean")
+            )
+            .reset_index()
+            .rename(columns={"AddressInfo.StateOrProvince": "Provincie"})
+            .sort_values("Aantal_palen", ascending=False)
         )
-        .reset_index()
-        .rename(columns={"AddressInfo.StateOrProvince": "Provincie"})
-        .sort_values("Aantal_palen", ascending=False)
-    )
 
-    keuze = st.selectbox(
-        "📈 Kies wat je wilt visualiseren:",
-        ["Aantal laadpalen", "Gemiddelde kosten per kWh", "Gemiddeld vermogen (kW)"]
-    )
+        # ---- Dropdown voor keuze ----
+        keuze = st.selectbox(
+            "📈 Kies welke verdeling je wilt zien:",
+            ["Aantal laadpalen per provincie", "Gemiddelde kosten per provincie", "Gemiddeld vermogen per provincie"]
+        )
 
-    if keuze == "Aantal laadpalen":
-        y_col, title = "Aantal_palen", "Aantal laadpalen per provincie"
-    elif keuze == "Gemiddelde kosten per kWh":
-        y_col, title = "Gemiddelde_kosten", "Gemiddelde kosten per kWh per provincie"
+        # ---- Dynamische grafiek ----
+        if keuze == "Aantal laadpalen per provincie":
+            fig = px.bar(df_agg, x="Provincie", y="Aantal_palen", title="Aantal laadpalen per provincie")
+        elif keuze == "Gemiddelde kosten per provincie":
+            fig = px.bar(df_agg, x="Provincie", y="Gemiddelde_kosten", title="Gemiddelde kosten per provincie (€ per kWh)")
+        else:
+            fig = px.bar(df_agg, x="Provincie", y="Gemiddeld_vermogen", title="Gemiddeld vermogen per provincie (kW)")
+
+        fig.update_layout(xaxis_title="Provincie", yaxis_title="", showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
     else:
-        y_col, title = "Gemiddeld_vermogen", "Gemiddeld laadvermogen (kW) per provincie"
-
-    fig = px.bar(
-        df_agg,
-        x="Provincie",
-        y=y_col,
-        color="Provincie",
-        title=title,
-        text_auto=True
-    )
-    fig.update_layout(xaxis_title="Provincie", yaxis_title="", showlegend=False, template="plotly_white")
-    st.plotly_chart(fig, use_container_width=True)
+        st.warning("Kon geen landelijke data laden voor de grafiek.")
 
 # ------------------- Pagina 2 --------------------------
-# ------------------------------------------------------
 elif page == "🚘 Voertuigen":
     st.markdown("## Overzicht Elektrische Voertuigen")
     st.write("Gebruik deze pagina voor analyses over elektrische voertuigen.")
@@ -215,7 +230,6 @@ elif page == "🚘 Voertuigen":
     st.write("🔧 Voeg hier je visualisaties toe.")
 
 # ------------------- Pagina 3 --------------------------
-# ------------------------------------------------------
 elif page == "📊 Voorspellend model":
     st.markdown("## Voorspellend Model")
     st.write("Gebruik deze pagina voor modellen en prognoses over laad- en voertuiggedrag.")
