@@ -173,7 +173,7 @@ if page == "⚡️ Laadpalen":
 
         # Render de kaart
         st_folium(m, width=900, height=650, returned_objects=["center", "zoom"])
-     st.markdown("<small>**Bron: openchargemap.org**</small>", unsafe_allow_html=True) 
+    st.markdown("<small>**Bron: openchargemap.org**</small>", unsafe_allow_html=True) 
 
 # ------------------- Pagina 2 --------------------------
 # ------------------------------------------------------
