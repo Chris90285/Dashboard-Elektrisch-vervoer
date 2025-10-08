@@ -392,13 +392,19 @@ elif page == "📊 Voorspellend model":
     st.markdown("---")
     st.write("🔧 Voeg hier je voorspellend model of simulatie toe.")
 
+    #-------Voorspellend model Koen-------
+
     warnings.filterwarnings("ignore")
 
     # ---------- Instellingen ----------
     EINDDATUM = pd.Timestamp("2030-12-01")
 
-    # ---------- Gebruik bestaande dataset ----------
-    df_auto1 = df_auto.copy()
+    # ---------- Dataset inladen ----------
+    # Laad de bestaande dataset die eerder gebruikt werd
+    df_charging_data = pd.read_pickle("Charging_data.pkl")
+
+    # ---------- Kopie gebruiken ----------
+    df_charging1 = df_charging_data.copy()
 
     # ---------- Type bepalen ----------
     def bepaal_type(merk, uitvoering):
@@ -413,34 +419,43 @@ elif page == "📊 Voorspellend model":
             return "Diesel"
         return "Benzine"
 
-    df_auto1["Type"] = df_auto1.apply(lambda r: bepaal_type(r.get("Merk",""), r.get("Uitvoering","")), axis=1)
+    df_charging1["Type"] = df_charging1.apply(
+        lambda r: bepaal_type(r.get("Merk",""), r.get("Uitvoering","")), axis=1
+    )
 
-    df_auto1["Datum eerste toelating"] = df_auto1["Datum eerste toelating"].astype(str).str.split(".").str[0]
-    df_auto1["Datum eerste toelating"] = pd.to_datetime(df_auto1["Datum eerste toelating"], format="%Y%m%d", errors="coerce")
+    # ---------- Datums opschonen ----------
+    df_charging1["Datum eerste toelating"] = df_charging1["Datum eerste toelating"].astype(str).str.split(".").str[0]
+    df_charging1["Datum eerste toelating"] = pd.to_datetime(
+        df_charging1["Datum eerste toelating"], format="%Y%m%d", errors="coerce"
+    )
 
-    df_auto2 = df_auto1.dropna(subset=["Datum eerste toelating"])
-    df_auto2 = df_auto2[df_auto2["Datum eerste toelating"].dt.year > 2010]
-    df_auto2["Maand"] = df_auto2["Datum eerste toelating"].dt.to_period("M").dt.to_timestamp()
+    # ---------- Filteren en groeperen ----------
+    df_charging2 = df_charging1.dropna(subset=["Datum eerste toelating"])
+    df_charging2 = df_charging2[df_charging2["Datum eerste toelating"].dt.year > 2010]
+    df_charging2["Maand"] = df_charging2["Datum eerste toelating"].dt.to_period("M").dt.to_timestamp()
 
-    maand_counts = df_auto2.groupby(["Maand", "Type"]).size().unstack(fill_value=0).sort_index()
-    if maand_counts.empty:
-        raise SystemExit("⚠ Geen bruikbare data gevonden in dataset na 2010.")
+    maand_counts_charging = df_charging2.groupby(["Maand", "Type"]).size().unstack(fill_value=0).sort_index()
+    if maand_counts_charging.empty:
+        st.error("⚠ Geen bruikbare data gevonden in dataset na 2010.")
+        st.stop()
 
-    cumul_hist = maand_counts.cumsum()
-    laatste_hist_maand = cumul_hist.index.max()
+    # ---------- Berekeningen ----------
+    cumul_hist_charging = maand_counts_charging.cumsum()
+    laatste_hist_maand = cumul_hist_charging.index.max()
     forecast_start = laatste_hist_maand + pd.DateOffset(months=1)
     forecast_index = pd.date_range(start=forecast_start, end=EINDDATUM, freq="MS")
     h = len(forecast_index)
 
-    forecast_median = pd.DataFrame(index=forecast_index)
-    forecast_lower = pd.DataFrame(index=forecast_index)
-    forecast_upper = pd.DataFrame(index=forecast_index)
+    forecast_median_charging = pd.DataFrame(index=forecast_index)
+    forecast_lower_charging = pd.DataFrame(index=forecast_index)
+    forecast_upper_charging = pd.DataFrame(index=forecast_index)
 
-    for col in maand_counts.columns:
-        y = maand_counts[col].astype(float)
+    # ---------- SARIMAX voorspelling ----------
+    for col in maand_counts_charging.columns:
+        y = maand_counts_charging[col].astype(float)
         
         if len(y) < 12:
-            print(f"⚠ Te weinig data voor {col}, gebruik lineaire extrapolatie.")
+            st.warning(f"⚠ Te weinig data voor {col}, gebruik lineaire extrapolatie.")
             x = np.arange(len(y))
             m, b = np.polyfit(x, y, 1)
             future_x = np.arange(len(y), len(y) + h)
@@ -455,27 +470,28 @@ elif page == "📊 Voorspellend model":
                 future_pred = np.maximum(pred.predicted_mean.values, 0)
                 conf_int = pred.conf_int(alpha=0.05).values
             except Exception as e:
-                print(f"⚠ Fout bij modelleren van {col}: {e}, val terug op lineair model.")
+                st.warning(f"⚠ Fout bij modelleren van {col}: {e}, val terug op lineair model.")
                 x = np.arange(len(y))
                 m, b = np.polyfit(x, y, 1)
                 future_x = np.arange(len(y), len(y) + h)
                 future_pred = np.maximum(b + m * future_x, 0)
                 conf_int = np.vstack([future_pred - y.std(), future_pred + y.std()]).T
         
-        last_cumul = cumul_hist[col].iloc[-1]
+        last_cumul = cumul_hist_charging[col].iloc[-1]
         cumul_forecast = last_cumul + np.cumsum(future_pred)
         cumul_lower = last_cumul + np.cumsum(np.maximum(conf_int[:,0], 0))
         cumul_upper = last_cumul + np.cumsum(np.maximum(conf_int[:,1], 0))
         
-        forecast_median[col] = cumul_forecast
-        forecast_lower[col] = cumul_lower
-        forecast_upper[col] = cumul_upper
+        forecast_median_charging[col] = cumul_forecast
+        forecast_lower_charging[col] = cumul_lower
+        forecast_upper_charging[col] = cumul_upper
 
+    # ---------- Plot ----------
     plt.figure(figsize=(14,7))
-    for col in cumul_hist.columns:
-        plt.plot(cumul_hist.index, cumul_hist[col], linewidth=2, label=f"{col} (historisch)")
-        plt.plot(forecast_index, forecast_median[col], linestyle="--", linewidth=2, label=f"{col} (SARIMAX voorspelling)")
-        plt.fill_between(forecast_index, forecast_lower[col], forecast_upper[col], alpha=0.2)
+    for col in cumul_hist_charging.columns:
+        plt.plot(cumul_hist_charging.index, cumul_hist_charging[col], linewidth=2, label=f"{col} (historisch)")
+        plt.plot(forecast_index, forecast_median_charging[col], linestyle="--", linewidth=2, label=f"{col} (SARIMAX voorspelling)")
+        plt.fill_between(forecast_index, forecast_lower_charging[col], forecast_upper_charging[col], alpha=0.2)
 
     plt.title("Voertuigregistraties per brandstoftype — Historisch + SARIMAX-voorspelling tot 2030")
     plt.xlabel("Jaar")
