@@ -38,6 +38,56 @@ with st.sidebar:
     st.write("*07 okt 2025*")
 
 # ======================================================
+#                   DATA-INLAADFUNCTIES
+# ======================================================
+
+@st.cache_data
+def load_data():
+    df_auto = pd.read_csv("duitse_automerken_JA.csv")
+    return df_auto
+
+@st.cache_data(ttl=86400)
+def get_laadpalen_data(lat: float, lon: float, radius: float) -> pd.DataFrame:
+    """Haalt laadpalen binnen een straal op."""
+    url = "https://api.openchargemap.io/v3/poi/"
+    params = {
+        "output": "json",
+        "countrycode": "NL",
+        "latitude": lat,
+        "longitude": lon,
+        "distance": radius,
+        "maxresults": 5000,
+        "compact": True,
+        "verbose": False,
+        "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
+    }
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    data = response.json()
+    df = pd.json_normalize(data)
+    df = df.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
+    return df
+
+@st.cache_data(ttl=86400)
+def get_all_laadpalen_nederland() -> pd.DataFrame:
+    """Haalt laadpalen van heel Nederland op (voor grafieken)."""
+    url = "https://api.openchargemap.io/v3/poi/"
+    params = {
+        "output": "json",
+        "countrycode": "NL",
+        "maxresults": 10000,
+        "compact": True,
+        "verbose": False,
+        "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
+    }
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    data = response.json()
+    df = pd.json_normalize(data)
+    return df
+
+
+# ======================================================
 #                   PAGINA-INDELING
 # ======================================================
 
@@ -69,56 +119,6 @@ if page == "⚡️ Laadpalen":
 
     provincie_keuze = st.selectbox("📍 Kies een provincie", provincies.keys(), index=0)
     center_lat, center_lon, radius_km = provincies[provincie_keuze]
-#-------------------data inladen-----------------------
-#-------------------------------------------------------
-#Main data set
-@st.cache_data
-def load_data():
-    df_auto = pd.read_csv("duitse_automerken_JA.csv")
-    return df_auto
-
-    # ---------------------
-    # API-call met caching
-    # ---------------------
-    @st.cache_data(ttl=86400)
-    def get_laadpalen_data(lat: float, lon: float, radius: float) -> pd.DataFrame:
-        """Haalt laadpalen binnen een straal op."""
-        url = "https://api.openchargemap.io/v3/poi/"
-        params = {
-            "output": "json",
-            "countrycode": "NL",
-            "latitude": lat,
-            "longitude": lon,
-            "distance": radius,
-            "maxresults": 5000,
-            "compact": True,
-            "verbose": False,
-            "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
-        }
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        data = response.json()
-        df = pd.json_normalize(data)
-        df = df.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
-        return df
-
-    @st.cache_data(ttl=86400)
-    def get_all_laadpalen_nederland() -> pd.DataFrame:
-        """Haalt laadpalen van heel Nederland op (voor grafieken)."""
-        url = "https://api.openchargemap.io/v3/poi/"
-        params = {
-            "output": "json",
-            "countrycode": "NL",
-            "maxresults": 10000,
-            "compact": True,
-            "verbose": False,
-            "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
-        }
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        data = response.json()
-        df = pd.json_normalize(data)
-        return df
 
     # ---------------------
     # Data ophalen
@@ -253,9 +253,6 @@ elif page == "🚘 Voertuigen":
     st.write("Op deze pagina is informatie te vinden over elektrische auto's in Nederland.")
     st.markdown("---")
 
-
-
-
 # ------------------- Pagina 3 --------------------------
 elif page == "📊 Voorspellend model":
     st.markdown("## Voorspellend Model")
@@ -361,4 +358,3 @@ elif page == "📊 Voorspellend model":
     plt.grid(True)
     plt.tight_layout()
     plt.show()
-
