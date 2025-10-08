@@ -216,7 +216,6 @@ if page == "⚡️ Laadpalen":
             .agg(
                 Aantal_palen=("ID", "count"),
                 Gemiddelde_kosten=("UsageCostClean", "mean"),
-                Gemiddeld_vermogen=("PowerKW_clean", "mean")
             )
             .reset_index()
             .sort_values("Aantal_palen", ascending=False)
@@ -225,7 +224,7 @@ if page == "⚡️ Laadpalen":
         # ---- Dropdown voor keuze ----
         keuze = st.selectbox(
             "📈 Kies welke verdeling je wilt zien:",
-            ["Aantal laadpalen per provincie", "Gemiddelde kosten per provincie", "Gemiddeld vermogen per provincie"]
+            ["Aantal laadpalen per provincie", "Gemiddelde kosten per provincie"]
         )
 
         # ---- Dynamische grafiek ----
@@ -234,7 +233,6 @@ if page == "⚡️ Laadpalen":
         elif keuze == "Gemiddelde kosten per provincie":
             fig = px.bar(df_agg, x="Provincie", y="Gemiddelde_kosten", title="Gemiddelde kosten per provincie (€ per kWh)")
         else:
-            fig = px.bar(df_agg, x="Provincie", y="Gemiddeld_vermogen", title="Gemiddeld vermogen per provincie (kW)")
 
         fig.update_layout(xaxis_title="Provincie", yaxis_title="", showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
