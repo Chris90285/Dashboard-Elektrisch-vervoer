@@ -296,6 +296,94 @@ elif page == "🚘 Voertuigen":
 
     # --- EXTRA INFO ---
     st.write("Data voorbeeld:", cumulatief.head())
+
+   #-------------Grafiek Ann---------
+   
+
+    st.title("🔌 EV Laad Analyse Dashboard")
+    st.write("Analyseer laadsessies per uur en bekijk jaaroverzicht van totale geladen energie.")
+
+    # ---- Bestand vast instellen ----
+    file_path = "Charging_data.pkl"
+    st.info(f"Bestand geladen: `{file_path}`")
+
+    # ---- FUNCTIE: x-as als hele getallen zetten ----
+    def force_integer_xaxis(fig):
+        fig.update_xaxes(dtick=1)
+        return fig
+
+    # ---- DATA INLADEN ----
+    try:
+        ev_data = pd.read_pickle(file_path)
+        ev_data.columns = (
+            ev_data.columns.astype(str)
+            .str.strip()
+            .str.replace("\u200b", "", regex=False)
+            .str.lower()
+        )
+
+        # ---- DATUMCONVERSIE EN KOLOMMEN TOEVOEGEN ----
+        ev_data["start_time"] = pd.to_datetime(ev_data["start_time"], errors="coerce")
+        ev_data["exit_time"] = pd.to_datetime(ev_data["exit_time"], errors="coerce")
+        ev_data["hour"] = ev_data["start_time"].dt.hour
+        ev_data["month"] = ev_data["start_time"].dt.to_period("M").astype(str)
+        ev_data["year"] = ev_data["start_time"].dt.year
+        ev_data = ev_data[ev_data["year"].notna()]
+        ev_data["year"] = ev_data["year"].astype(int)
+
+        # ---- FILTERS ----
+        phase_options = ["Alle"] + [
+            x for x in sorted(ev_data["n_phases"].dropna().unique()) if 0 <= x <= 6
+        ]
+        phase_choice = st.sidebar.selectbox("Filter op aantal fasen (N_phases)", phase_options)
+
+        year_options = ["Alle"] + sorted(ev_data["year"].dropna().unique().tolist())
+        year_choice = st.sidebar.selectbox("Filter op jaar", year_options)
+
+        ev_filtered = ev_data.copy()
+        if phase_choice != "Alle":
+            ev_filtered = ev_filtered[ev_filtered["n_phases"] == phase_choice]
+        if year_choice != "Alle":
+            ev_filtered = ev_filtered[ev_filtered["year"] == year_choice]
+
+        energy_col = "energy_delivered [kwh]"
+
+        # ---- GRAFIEK 1: Laadsessies per uur van de dag ----
+        st.subheader("⏰ Laadsessies per uur van de dag")
+        hourly_counts = ev_filtered.groupby("hour").size().reset_index(name="Aantal laadsessies")
+        fig1 = px.bar(hourly_counts, x="hour", y="Aantal laadsessies",
+                    title="Aantal laadsessies per uur van de dag")
+        fig1 = force_integer_xaxis(fig1)
+        st.plotly_chart(fig1, use_container_width=True)
+
+        # ---- GRAFIEK 2: Totaal geladen energie per maand ----
+        st.subheader("📅 Totaal geladen energie per maand")
+        energy_by_month = (
+            ev_filtered.groupby("month")[energy_col].sum().reset_index().sort_values("month")
+        )
+        fig2 = px.bar(energy_by_month, x="month", y=energy_col,
+                    title="Totaal geladen energie per maand")
+        fig2.update_xaxes(type='category')
+        st.plotly_chart(fig2, use_container_width=True)
+
+        # ---- GRAFIEK 3: Totaal geladen energie per jaar ----
+        st.subheader("📈 Totaal geladen energie per jaar")
+        energy_by_year = (
+            ev_filtered.groupby("year")[energy_col].sum().reset_index().sort_values("year")
+        )
+        fig3 = px.bar(energy_by_year, x="year", y=energy_col,
+                    title="Totaal geladen energie per jaar")
+        fig3 = force_integer_xaxis(fig3)
+        st.plotly_chart(fig3, use_container_width=True)
+
+        # ---- DATA BEKIJKEN ----
+        with st.expander("📊 Bekijk gebruikte data"):
+            st.dataframe(ev_filtered)
+
+    except Exception as e:
+        st.error(f"Er is een fout opgetreden bij het inlezen van `{file_path}`: {e}")
+
+
 # ------------------- Pagina 3 --------------------------
 elif page == "📊 Voorspellend model":
     st.markdown("## Voorspellend Model")
