@@ -1,11 +1,12 @@
 streamlit
 pandas
-plotly
 numpy
+requests
+plotly
 altair
 matplotlib
-folium
-requests
-scikit-learn
 seaborn
+folium
 streamlit-folium
+scikit-learn
+statsmodels
