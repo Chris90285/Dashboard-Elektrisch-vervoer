@@ -163,7 +163,6 @@ if page == "⚡️ Laadpalen":
                 icon = folium.Icon(color="green", icon="bolt", prefix="fa")
                 folium.Marker(location=[lat, lon], popup=folium.Popup(popup, max_width=300), icon=icon).add_to(marker_cluster)
 
-            st.success(f"Detailmodus: {len(subset_df)} laadpalen met popups geladen.")
             st.success(f"{len(subset_df)} laadpalen met popups geladen.")
         st_folium(m, width=900, height=650, returned_objects=["center", "zoom"])
 
@@ -173,13 +172,23 @@ if page == "⚡️ Laadpalen":
     st.markdown("## 📊 Verdeling laadpalen in Nederland")
 
     if len(df_all) > 0:
+        # ✅ Verbeterde parse_cost functie
+        # ✅ Verbeterde parse_cost functie + filtering
         def parse_cost(value):
             if isinstance(value, str):
+                if "free" in value.lower() or "gratis" in value.lower():
+                    return 0.0
                 match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
                 return float(match.group(1)) if match else np.nan
             return np.nan
 
         df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
+
+        # ✅ Onrealistische waarden uitsluiten (>2 €/kWh)
+        df_all.loc[
+            (df_all["UsageCostClean"] < 0) | (df_all["UsageCostClean"] > 2),
+            "UsageCostClean"
+        ] = np.nan
 
         if "PowerKW" in df_all.columns:
             df_all["PowerKW_clean"] = pd.to_numeric(df_all["PowerKW"], errors="coerce")
