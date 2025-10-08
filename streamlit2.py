@@ -101,6 +101,7 @@ if page == "⚡️ Laadpalen":
     st.markdown("## Kaart laadpalen")
     st.write("Op deze pagina is een kaart te zien met laadpalen in Nederland.")
     st.write("Klik op een laadpaal voor meer informatie.")
+    st.write("Gebruik het dropdown menu om verschillende provincies te bekijken.")
     st.markdown("---")
 
     provincies = {
@@ -162,7 +163,7 @@ if page == "⚡️ Laadpalen":
                 icon = folium.Icon(color="green", icon="bolt", prefix="fa")
                 folium.Marker(location=[lat, lon], popup=folium.Popup(popup, max_width=300), icon=icon).add_to(marker_cluster)
 
-            st.success(f"Detailmodus: {len(subset_df)} laadpalen met popups geladen.")
+            st.success(f"{len(subset_df)} laadpalen met popups geladen.")
         st_folium(m, width=900, height=650, returned_objects=["center", "zoom"])
 
     st.markdown("<small>**Bron: openchargemap.org**</small>", unsafe_allow_html=True)
@@ -388,9 +389,10 @@ elif page == "🚘 Voertuigen":
 # ------------------- Pagina 3 --------------------------
 elif page == "📊 Voorspellend model":
     st.markdown("## Voorspellend Model")
-    st.write("Gebruik deze pagina voor modellen en prognoses over laad- en voertuiggedrag.")
+    st.write("Hier is een voorspellend model te zien, wat de hoeveelheid type auto's voorspeld in Nederland.")
+    st.write("")
     st.markdown("---")
-    st.write("🔧 Voeg hier je voorspellend model of simulatie toe.")
+    st.title("Voorspelling auto's in Nederland per brandstofcategorie")
 
     #-------Voorspellend model Koen-------
 
