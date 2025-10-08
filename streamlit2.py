@@ -172,7 +172,7 @@ if page == "⚡️ Laadpalen":
     st.markdown("## 📊 Verdeling laadpalen in Nederland")
 
     if len(df_all) > 0:
-        # ✅ Verbeterde parse_cost functie
+        # ✅ Verbeterde parse_cost functie + filtering
         def parse_cost(value):
             if isinstance(value, str):
                 if "free" in value.lower() or "gratis" in value.lower():
@@ -244,3 +244,15 @@ if page == "⚡️ Laadpalen":
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("Kon geen landelijke data laden voor de grafiek.")
+
+# ------------------- Pagina 2 --------------------------
+elif page == "🚘 Voertuigen":
+    ...
+    # (rest van jouw originele code voor voertuigenpagina)
+    ...
+
+# ------------------- Pagina 3 --------------------------
+elif page == "📊 Voorspellend model":
+    ...
+    # (rest van jouw originele code voor voorspellend model)
+    ...
