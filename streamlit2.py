@@ -14,6 +14,7 @@ import re
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster, FastMarkerCluster
 from statsmodels.tsa.statespace.sarimax import SARIMAX
+import matplotlib.pyplot as plt
 import warnings
 
 # ------------------- Sidebar ---------------------------
@@ -37,10 +38,9 @@ with st.sidebar:
     st.write("Voor het laatst geüpdatet op:")
     st.write("*07 okt 2025*")
 
-# ======================================================
-#                   DATA-INLAADFUNCTIES
-# ======================================================
 
+# ------------------- Data inladen -----------------------
+# -------------------------------------------------------
 @st.cache_data
 def load_data():
     df_auto = pd.read_csv("duitse_automerken_JA.csv")
@@ -86,6 +86,9 @@ def get_all_laadpalen_nederland() -> pd.DataFrame:
     df = pd.json_normalize(data)
     return df
 
+# ✅ Dataframe inladen zodra de app start
+df_auto = load_data()
+
 
 # ======================================================
 #                   PAGINA-INDELING
@@ -98,9 +101,6 @@ if page == "⚡️ Laadpalen":
     st.write("Klik op een laadpaal voor meer informatie.")
     st.markdown("---")
 
-    # ======================
-    # 🔍 FILTER: Provincie
-    # ======================
     provincies = {
         "Heel Nederland": [52.1, 5.3, 200],
         "Groningen": [53.2194, 6.5665, 60],
@@ -120,9 +120,6 @@ if page == "⚡️ Laadpalen":
     provincie_keuze = st.selectbox("📍 Kies een provincie", provincies.keys(), index=0)
     center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
-    # ---------------------
-    # Data ophalen
-    # ---------------------
     with st.spinner(f" Laad laadpalen voor {provincie_keuze}..."):
         df = get_laadpalen_data(center_lat, center_lon, radius_km)
         df_all = get_all_laadpalen_nederland()
@@ -132,9 +129,6 @@ if page == "⚡️ Laadpalen":
         else:
             Laadpalen = df
 
-    # ---------------------
-    # Kaart tonen
-    # ---------------------
     MAX_DEFAULT = 300  
     st.write(f"Provincie: **{provincie_keuze}** — gevonden laadpalen: **{len(Laadpalen)}**")
     laad_alle = st.checkbox("Laad alle laadpalen (geen popups)", value=False)
@@ -171,14 +165,10 @@ if page == "⚡️ Laadpalen":
 
     st.markdown("<small>**Bron: openchargemap.org**</small>", unsafe_allow_html=True)
 
-    # ======================================================
-    # 📊 GRAFIEK: Verdeling laadpalen in Nederland
-    # ======================================================
     st.markdown("---")
     st.markdown("## 📊 Verdeling laadpalen in Nederland")
 
     if len(df_all) > 0:
-        # ---- Data opschonen ----
         def parse_cost(value):
             if isinstance(value, str):
                 match = re.search(r"(\d+[\.,]?\d*)", value.replace(",", "."))
@@ -196,7 +186,6 @@ if page == "⚡️ Laadpalen":
         else:
             df_all["PowerKW_clean"] = np.nan
 
-        # ---- Provincienamen mappen ----
         provincie_mapping = {
             "Groningen": "Groningen",
             "Friesland": "Friesland",
@@ -219,7 +208,6 @@ if page == "⚡️ Laadpalen":
         df_all["Provincie"] = df_all["AddressInfo.StateOrProvince"].map(provincie_mapping)
         df_all = df_all[df_all["Provincie"].isin(list(provincies.keys()))]
 
-        # ---- Aggregatie ----
         df_agg = (
             df_all.groupby("Provincie")
             .agg(
@@ -230,13 +218,11 @@ if page == "⚡️ Laadpalen":
             .sort_values("Aantal_palen", ascending=False)
         )
 
-        # ---- Dropdown voor keuze ----
         keuze = st.selectbox(
             "📈 Kies welke verdeling je wilt zien:",
             ["Aantal laadpalen per provincie", "Gemiddelde kosten per provincie"]
         )
 
-        # ---- Dynamische grafiek ----
         if keuze == "Aantal laadpalen per provincie":
             fig = px.bar(df_agg, x="Provincie", y="Aantal_palen", title="Aantal laadpalen per provincie")
         elif keuze == "Gemiddelde kosten per provincie":
@@ -247,11 +233,13 @@ if page == "⚡️ Laadpalen":
     else:
         st.warning("Kon geen landelijke data laden voor de grafiek.")
 
+
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
     st.markdown("## Overzicht Elektrische Voertuigen")
     st.write("Op deze pagina is informatie te vinden over elektrische auto's in Nederland.")
     st.markdown("---")
+
 
 # ------------------- Pagina 3 --------------------------
 elif page == "📊 Voorspellend model":
@@ -283,16 +271,13 @@ elif page == "📊 Voorspellend model":
 
     df_auto1["Type"] = df_auto1.apply(lambda r: bepaal_type(r.get("Merk",""), r.get("Uitvoering","")), axis=1)
 
-    # ---------- Datum verwerken ----------
     df_auto1["Datum eerste toelating"] = df_auto1["Datum eerste toelating"].astype(str).str.split(".").str[0]
     df_auto1["Datum eerste toelating"] = pd.to_datetime(df_auto1["Datum eerste toelating"], format="%Y%m%d", errors="coerce")
 
-    # Filter en schoonmaak
     df_auto2 = df_auto1.dropna(subset=["Datum eerste toelating"])
     df_auto2 = df_auto2[df_auto2["Datum eerste toelating"].dt.year > 2010]
     df_auto2["Maand"] = df_auto2["Datum eerste toelating"].dt.to_period("M").dt.to_timestamp()
 
-    # ---------- Aggregatie ----------
     maand_counts = df_auto2.groupby(["Maand", "Type"]).size().unstack(fill_value=0).sort_index()
     if maand_counts.empty:
         raise SystemExit("⚠ Geen bruikbare data gevonden in dataset na 2010.")
@@ -303,12 +288,10 @@ elif page == "📊 Voorspellend model":
     forecast_index = pd.date_range(start=forecast_start, end=EINDDATUM, freq="MS")
     h = len(forecast_index)
 
-    # ---------- Forecast containers ----------
     forecast_median = pd.DataFrame(index=forecast_index)
     forecast_lower = pd.DataFrame(index=forecast_index)
     forecast_upper = pd.DataFrame(index=forecast_index)
 
-    # ---------- Voorspelling per brandstoftype ----------
     for col in maand_counts.columns:
         y = maand_counts[col].astype(float)
         
@@ -344,7 +327,6 @@ elif page == "📊 Voorspellend model":
         forecast_lower[col] = cumul_lower
         forecast_upper[col] = cumul_upper
 
-    # ---------- Plot ----------
     plt.figure(figsize=(14,7))
     for col in cumul_hist.columns:
         plt.plot(cumul_hist.index, cumul_hist[col], linewidth=2, label=f"{col} (historisch)")
@@ -357,4 +339,4 @@ elif page == "📊 Voorspellend model":
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.show()
+    st.pyplot(plt)
