@@ -50,7 +50,7 @@ if page == "⚡️ Laadpalen":
     st.markdown("---")
 
     # ======================
-    # 📍 FILTER: Provincie
+    # 🔍 FILTER: Provincie
     # ======================
     provincies = {
         "Heel Nederland": [52.1, 5.3, 200],
@@ -71,9 +71,9 @@ if page == "⚡️ Laadpalen":
     provincie_keuze = st.selectbox("📍 Kies een provincie", provincies.keys(), index=0)
     center_lat, center_lon, radius_km = provincies[provincie_keuze]
 
-    # ======================
+    # ---------------------
     # 🔌 API-call met caching
-    # ======================
+    # ---------------------
     @st.cache_data(ttl=86400)
     def get_laadpalen_data(lat: float, lon: float, radius: float) -> pd.DataFrame:
         url = "https://api.openchargemap.io/v3/poi/"
@@ -98,10 +98,10 @@ if page == "⚡️ Laadpalen":
     with st.spinner(f"🔌 Laad laadpalen voor {provincie_keuze}..."):
         Laadpalen = get_laadpalen_data(center_lat, center_lon, radius_km)
 
-    # ======================
+    # ---------------------
     # 🌍 Kaartinstellingen
-    # ======================
-    DETAIL_ZOOM_LEVEL = 11  # 📌 Duidelijke drempel voor detailmodus
+    # ---------------------
+    DETAIL_ZOOM_LEVEL = 11  # 📌 Zoomniveau waarop detailmodus automatisch wordt geactiveerd
 
     if "map_state" not in st.session_state:
         st.session_state["map_state"] = {
@@ -116,43 +116,43 @@ if page == "⚡️ Laadpalen":
         st.session_state["map_state"]["lon"] = center_lon
         st.session_state["map_state"]["zoom"] = 8 if provincie_keuze == "Heel Nederland" else 10
 
-    # ======================
+    # ---------------------
     # 🗺️ Kaart genereren
-    # ======================
+    # ---------------------
     m = folium.Map(
         location=[st.session_state["map_state"]["lat"], st.session_state["map_state"]["lon"]],
         zoom_start=st.session_state["map_state"]["zoom"],
         tiles="OpenStreetMap"
     )
 
-    # Toon standaard snelle markers
+    # Toon standaard snelle markers (FastCluster zonder popups)
     FastMarkerCluster(
         data=list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
     ).add_to(m)
 
-    map_data = st_folium(m, width=800, height=600, returned_objects=["center", "zoom"])
+    map_data = st_folium(m, width=900, height=650, returned_objects=["center", "zoom"])
 
-    # ======================
+    # ---------------------
     # 🧭 Zoom volgen & detailmodus
-    # ======================
+    # ---------------------
     if map_data and "zoom" in map_data:
-        st.session_state["map_state"]["zoom"] = map_data["zoom"]
-        st.session_state["map_state"]["lat"] = map_data["center"]["lat"]
-        st.session_state["map_state"]["lon"] = map_data["center"]["lng"]
+        zoom = map_data["zoom"]
+        lat = map_data["center"]["lat"]
+        lon = map_data["center"]["lng"]
+        st.session_state["map_state"]["zoom"] = zoom
+        st.session_state["map_state"]["lat"] = lat
+        st.session_state["map_state"]["lon"] = lon
 
-        if map_data["zoom"] >= DETAIL_ZOOM_LEVEL:
-            st.info(f"🔍 Detailmodus actief (zoomniveau {map_data['zoom']})")
+        # Detailmodus automatisch bij voldoende inzoomen
+        if zoom >= DETAIL_ZOOM_LEVEL:
+            st.info(f"🔍 Detailmodus actief (zoomniveau {zoom})")
 
             with st.spinner("📡 Ophalen details in dit gebied..."):
-                detail_data = get_laadpalen_data(
-                    map_data["center"]["lat"], 
-                    map_data["center"]["lng"], 
-                    20  # radius bij detailmodus
-                )
+                detail_data = get_laadpalen_data(lat, lon, 20)  # radius voor detailmodus
 
                 detail_map = folium.Map(
-                    location=[map_data["center"]["lat"], map_data["center"]["lng"]],
-                    zoom_start=map_data["zoom"],
+                    location=[lat, lon],
+                    zoom_start=zoom,
                     tiles="OpenStreetMap"
                 )
                 marker_cluster = MarkerCluster().add_to(detail_map)
@@ -167,11 +167,12 @@ if page == "⚡️ Laadpalen":
                     """
                     folium.Marker(
                         location=[row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]],
-                        popup=popup,
+                        popup=folium.Popup(popup, max_width=300),
+                        # ✅ Icon voor laadpaal: groen bolt i.p.v. huisje
                         icon=folium.Icon(color="green", icon="bolt", prefix="fa")
                     ).add_to(marker_cluster)
 
-                st_folium(detail_map, width=800, height=600)
+                st_folium(detail_map, width=900, height=650)
 
 # ------------------- Pagina 2 --------------------------
 # ------------------------------------------------------
