@@ -117,7 +117,7 @@ if page == "⚡️ Laadpalen":
         st.session_state["map_state"]["zoom"] = 8 if provincie_keuze == "Heel Nederland" else 10
 
     # ---------------------
-    # 🗺️ Kaart genereren
+    # 🗺️ Kaart genereren (altijd eerst snelle versie)
     # ---------------------
     m = folium.Map(
         location=[st.session_state["map_state"]["lat"], st.session_state["map_state"]["lon"]],
@@ -125,31 +125,10 @@ if page == "⚡️ Laadpalen":
         tiles="OpenStreetMap"
     )
 
-    # 🔘 Knop om alles in FastMarkerCluster te laden
-    gebruik_fast = st.checkbox("🔄 Laad alle laadpalen (sneller)", value=False)
-
-    if gebruik_fast:
-        # 🔥 Snelle maar simpele cluster (zonder popups)
-        FastMarkerCluster(
-            data=list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
-        ).add_to(m)
-
-    else:
-        # 🎯 Detail markers met bliksemschicht en popups
-        marker_cluster = MarkerCluster().add_to(m)
-        for _, row in Laadpalen.iterrows():
-            popup = f"""
-            <b>{row.get('AddressInfo.Title', 'Onbekend')}</b><br>
-            {row.get('AddressInfo.AddressLine1', '')}<br>
-            {row.get('AddressInfo.Town', '')}<br>
-            Kosten: {row.get('UsageCost', 'N/B')}<br>
-            Vermogen: {row.get('PowerKW', 'N/B')} kW
-            """
-            folium.Marker(
-                location=[row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]],
-                popup=folium.Popup(popup, max_width=300),
-                icon=folium.Icon(color="green", icon="bolt", prefix="fa")  # ⚡️ icoontje
-            ).add_to(marker_cluster)
+    # 🚀 Standaard: FastMarkerCluster voor snelheid
+    FastMarkerCluster(
+        data=list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
+    ).add_to(m)
 
     map_data = st_folium(m, width=900, height=650, returned_objects=["center", "zoom"])
 
@@ -164,12 +143,12 @@ if page == "⚡️ Laadpalen":
         st.session_state["map_state"]["lat"] = lat
         st.session_state["map_state"]["lon"] = lon
 
-        # Detailmodus automatisch bij voldoende inzoomen
-        if zoom >= DETAIL_ZOOM_LEVEL and not gebruik_fast:
+        # 🔍 Bij voldoende inzoomen → laad detailweergave
+        if zoom >= DETAIL_ZOOM_LEVEL:
             st.info(f"🔍 Detailmodus actief (zoomniveau {zoom})")
 
             with st.spinner("📡 Ophalen details in dit gebied..."):
-                detail_data = get_laadpalen_data(lat, lon, 20)  # radius voor detailmodus
+                detail_data = get_laadpalen_data(lat, lon, 20)  # kleinere radius
 
                 detail_map = folium.Map(
                     location=[lat, lon],
@@ -189,7 +168,7 @@ if page == "⚡️ Laadpalen":
                     folium.Marker(
                         location=[row["AddressInfo.Latitude"], row["AddressInfo.Longitude"]],
                         popup=folium.Popup(popup, max_width=300),
-                        icon=folium.Icon(color="green", icon="bolt", prefix="fa")
+                        icon=folium.Icon(color="green", icon="bolt", prefix="fa")  # ⚡️ icoontje
                     ).add_to(marker_cluster)
 
                 st_folium(detail_map, width=900, height=650)
