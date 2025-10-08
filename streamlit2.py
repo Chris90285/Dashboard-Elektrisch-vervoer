@@ -17,6 +17,7 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 import matplotlib.pyplot as plt
 import warnings
 import pickle
+import io
 
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
