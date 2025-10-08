@@ -249,7 +249,7 @@ if page == "⚡️ Laadpalen":
 
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
-    st.markdown("## Overzicht Elektrische Voertuigen")
+    st.markdown("##Elektrische Voertuigen & laadtijden")
     st.write("Op deze pagina is informatie te vinden over elektrische auto's in Nederland.")
     st.markdown("---")
 
@@ -310,14 +310,10 @@ elif page == "🚘 Voertuigen":
     st.write("Data voorbeeld:", cumulatief.head())
 
    #-------------Grafiek Ann---------
-
-
-    st.title("🔌 EV Laad Analyse Dashboard")
     st.write("Analyseer laadsessies per uur en bekijk jaaroverzicht van totale geladen energie.")
 
     # ---- Bestand vast instellen ----
     file_path = "Charging_data.pkl"
-    st.info(f"Bestand geladen: `{file_path}`")
 
     # ---- FUNCTIE: x-as als hele getallen zetten ----
     def force_integer_xaxis(fig):
@@ -347,21 +343,18 @@ elif page == "🚘 Voertuigen":
         phase_options = ["Alle"] + [
             x for x in sorted(ev_data["n_phases"].dropna().unique()) if 0 <= x <= 6
         ]
-        phase_choice = st.sidebar.selectbox("Filter op aantal fasen (N_phases)", phase_options)
+        phase_choice = st.selectbox("Filter op aantal fasen (N_phases)", phase_options)
 
-        year_options = ["Alle"] + sorted(ev_data["year"].dropna().unique().tolist())
-        year_choice = st.sidebar.selectbox("Filter op jaar", year_options)
 
         ev_filtered = ev_data.copy()
         if phase_choice != "Alle":
             ev_filtered = ev_filtered[ev_filtered["n_phases"] == phase_choice]
-        if year_choice != "Alle":
-            ev_filtered = ev_filtered[ev_filtered["year"] == year_choice]
+
 
         energy_col = "energy_delivered [kwh]"
 
         # ---- GRAFIEK 1: Laadsessies per uur van de dag ----
-        st.subheader("⏰ Laadsessies per uur van de dag")
+        st.subheader("Laadsessies per uur van de dag")
         hourly_counts = ev_filtered.groupby("hour").size().reset_index(name="Aantal laadsessies")
         fig1 = px.bar(hourly_counts, x="hour", y="Aantal laadsessies",
                     title="Aantal laadsessies per uur van de dag")
@@ -369,7 +362,7 @@ elif page == "🚘 Voertuigen":
         st.plotly_chart(fig1, use_container_width=True)
 
         # ---- GRAFIEK 2: Totaal geladen energie per maand ----
-        st.subheader("📅 Totaal geladen energie per maand")
+        st.subheader("Totaal geladen energie per maand")
         energy_by_month = (
             ev_filtered.groupby("month")[energy_col].sum().reset_index().sort_values("month")
         )
@@ -379,7 +372,7 @@ elif page == "🚘 Voertuigen":
         st.plotly_chart(fig2, use_container_width=True)
 
         # ---- GRAFIEK 3: Totaal geladen energie per jaar ----
-        st.subheader("📈 Totaal geladen energie per jaar")
+        st.subheader("Totaal geladen energie per jaar")
         energy_by_year = (
             ev_filtered.groupby("year")[energy_col].sum().reset_index().sort_values("year")
         )
@@ -403,7 +396,6 @@ elif page == "📊 Voorspellend model":
     st.write("Hier is een voorspellend model te zien, wat de hoeveelheid type auto's voorspeld in Nederland.")
     st.write("")
     st.markdown("---")
-    st.write("🔧 Voeg hier je voorspellend model of simulatie toe.")
     st.title("Voorspelling auto's in Nederland per brandstofcategorie")
 
     #-------Voorspellend model Koen-------
