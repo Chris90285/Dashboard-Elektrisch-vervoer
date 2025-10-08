@@ -399,12 +399,9 @@ elif page == "📊 Voorspellend model":
     # ---------- Instellingen ----------
     EINDDATUM = pd.Timestamp("2030-12-01")
 
-    # ---------- Dataset inladen ----------
-    # Laad de bestaande dataset die eerder gebruikt werd
-    df_charging_data = pd.read_pickle("Charging_data.pkl")
 
     # ---------- Kopie gebruiken ----------
-    df_charging1 = df_charging_data.copy()
+    df_auto_kopie = df_auto.copy()
 
     # ---------- Type bepalen ----------
     def bepaal_type(merk, uitvoering):
@@ -419,22 +416,22 @@ elif page == "📊 Voorspellend model":
             return "Diesel"
         return "Benzine"
 
-    df_charging1["Type"] = df_charging1.apply(
+    df_auto_kopie["Type"] = df_auto_kopie.apply(
         lambda r: bepaal_type(r.get("Merk",""), r.get("Uitvoering","")), axis=1
     )
 
     # ---------- Datums opschonen ----------
-    df_charging1["Datum eerste toelating"] = df_charging1["Datum eerste toelating"].astype(str).str.split(".").str[0]
-    df_charging1["Datum eerste toelating"] = pd.to_datetime(
-        df_charging1["Datum eerste toelating"], format="%Y%m%d", errors="coerce"
+    df_auto_kopie["Datum eerste toelating"] = df_auto_kopie["Datum eerste toelating"].astype(str).str.split(".").str[0]
+    df_auto_kopie["Datum eerste toelating"] = pd.to_datetime(
+        df_auto_kopie["Datum eerste toelating"], format="%Y%m%d", errors="coerce"
     )
 
     # ---------- Filteren en groeperen ----------
-    df_charging2 = df_charging1.dropna(subset=["Datum eerste toelating"])
-    df_charging2 = df_charging2[df_charging2["Datum eerste toelating"].dt.year > 2010]
-    df_charging2["Maand"] = df_charging2["Datum eerste toelating"].dt.to_period("M").dt.to_timestamp()
+    df_auto_kopie2 = df_auto_kopie.dropna(subset=["Datum eerste toelating"])
+    df_auto_kopie2 = df_auto_kopie2[df_auto_kopie2["Datum eerste toelating"].dt.year > 2010]
+    df_auto_kopie2["Maand"] = df_auto_kopie2["Datum eerste toelating"].dt.to_period("M").dt.to_timestamp()
 
-    maand_counts_charging = df_charging2.groupby(["Maand", "Type"]).size().unstack(fill_value=0).sort_index()
+    maand_counts_charging = df_auto_kopie2.groupby(["Maand", "Type"]).size().unstack(fill_value=0).sort_index()
     if maand_counts_charging.empty:
         st.error("⚠ Geen bruikbare data gevonden in dataset na 2010.")
         st.stop()
