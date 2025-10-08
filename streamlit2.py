@@ -45,8 +45,9 @@ with st.sidebar:
 # ------------------- Pagina 1 --------------------------
 # ------------------------------------------------------
 if page == "⚡️ Laadpalen":
-    st.markdown("## Overzicht Laadpalen")
-    st.write("Gebruik deze pagina voor een kort overzicht of KPI’s over laadpalen.")
+    st.markdown("## Kaart laadpalen")
+    st.write("Op deze pagina is een kaart te zien met laadpalen in Nederland.")
+    st.write("Klik op een laadpaal voor meer informatie.")
     st.markdown("---")
 
     # ======================
@@ -113,7 +114,6 @@ if page == "⚡️ Laadpalen":
     # Kaart maken
     # ---------------------
     st.write(f"📍 Provincie: **{provincie_keuze}** — gevonden laadpalen: **{len(Laadpalen)}**")
-    st.write(f"Standaardmodus toont maximaal **{MAX_DEFAULT}** laadpalen & popups.")
 
     # Checkbox: alle punten met FastMarkerCluster 
     laad_alle = st.checkbox("Laad alle laadpalen (geen popups)", value=False)
