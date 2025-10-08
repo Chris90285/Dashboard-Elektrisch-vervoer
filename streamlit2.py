@@ -113,7 +113,7 @@ if page == "⚡️ Laadpalen":
     # ---------------------
     # Kaart maken
     # ---------------------
-    st.write(f"📍 Provincie: **{provincie_keuze}** — gevonden laadpalen: **{len(Laadpalen)}**")
+    st.write(f"Provincie: **{provincie_keuze}** — gevonden laadpalen: **{len(Laadpalen)}**")
 
     # Checkbox: alle punten met FastMarkerCluster 
     laad_alle = st.checkbox("Laad alle laadpalen (geen popups)", value=False)
@@ -160,7 +160,7 @@ if page == "⚡️ Laadpalen":
                 Vermogen: {row.get('PowerKW', 'N/B')} kW
                 """
 
-                # ✅ Bliksem icoon voor laadpalen
+                # Bliksem icoon 
                 icon = folium.Icon(color="green", icon="bolt", prefix="fa")
 
                 folium.Marker(
@@ -173,6 +173,7 @@ if page == "⚡️ Laadpalen":
 
         # Render de kaart
         st_folium(m, width=900, height=650, returned_objects=["center", "zoom"])
+     st.markdown("<small>**Bron: openchargemap.org**</small>", unsafe_allow_html=True) 
 
 # ------------------- Pagina 2 --------------------------
 # ------------------------------------------------------
