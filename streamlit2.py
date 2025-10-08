@@ -13,6 +13,8 @@ import requests
 import re
 from streamlit_folium import st_folium
 from folium.plugins import MarkerCluster, FastMarkerCluster
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+import warnings
 
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
@@ -67,6 +69,13 @@ if page == "⚡️ Laadpalen":
 
     provincie_keuze = st.selectbox("📍 Kies een provincie", provincies.keys(), index=0)
     center_lat, center_lon, radius_km = provincies[provincie_keuze]
+#-------------------data inladen-----------------------
+#-------------------------------------------------------
+#Main data set
+@st.cache_data
+def load_data():
+    df_auto = pd.read_csv("duitse_automerken_JA.csv")
+    return df_auto
 
     # ---------------------
     # API-call met caching
@@ -241,9 +250,11 @@ if page == "⚡️ Laadpalen":
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
     st.markdown("## Overzicht Elektrische Voertuigen")
-    st.write("Gebruik deze pagina voor analyses over elektrische voertuigen.")
+    st.write("Op deze pagina is informatie te vinden over elektrische auto's in Nederland.")
     st.markdown("---")
-    st.write("🔧 Voeg hier je visualisaties toe.")
+
+
+
 
 # ------------------- Pagina 3 --------------------------
 elif page == "📊 Voorspellend model":
@@ -251,3 +262,103 @@ elif page == "📊 Voorspellend model":
     st.write("Gebruik deze pagina voor modellen en prognoses over laad- en voertuiggedrag.")
     st.markdown("---")
     st.write("🔧 Voeg hier je voorspellend model of simulatie toe.")
+
+    warnings.filterwarnings("ignore")
+
+    # ---------- Instellingen ----------
+    EINDDATUM = pd.Timestamp("2030-12-01")
+
+    # ---------- Gebruik bestaande dataset ----------
+    df_auto1 = df_auto.copy()
+
+    # ---------- Type bepalen ----------
+    def bepaal_type(merk, uitvoering):
+        u = str(uitvoering).upper()
+        m = str(merk).upper()
+        if ("BMW I" in m or "PORSCHE" in m or
+            u.startswith(("FA1FA1CZ","3EER","3EDF","3EDE","2EER","2EDF","2EDE",
+                        "E11","0AW5","QE2QE2G1","QE1QE1G1","HE1HE1G1")) or
+            "EV" in u or "FA1FA1MD" in u):
+            return "Elektrisch"
+        if "DIESEL" in u or "TDI" in u or "CDI" in u or "DPE" in u or u.startswith("D"):
+            return "Diesel"
+        return "Benzine"
+
+    df_auto1["Type"] = df_auto1.apply(lambda r: bepaal_type(r.get("Merk",""), r.get("Uitvoering","")), axis=1)
+
+    # ---------- Datum verwerken ----------
+    df_auto1["Datum eerste toelating"] = df_auto1["Datum eerste toelating"].astype(str).str.split(".").str[0]
+    df_auto1["Datum eerste toelating"] = pd.to_datetime(df_auto1["Datum eerste toelating"], format="%Y%m%d", errors="coerce")
+
+    # Filter en schoonmaak
+    df_auto2 = df_auto1.dropna(subset=["Datum eerste toelating"])
+    df_auto2 = df_auto2[df_auto2["Datum eerste toelating"].dt.year > 2010]
+    df_auto2["Maand"] = df_auto2["Datum eerste toelating"].dt.to_period("M").dt.to_timestamp()
+
+    # ---------- Aggregatie ----------
+    maand_counts = df_auto2.groupby(["Maand", "Type"]).size().unstack(fill_value=0).sort_index()
+    if maand_counts.empty:
+        raise SystemExit("⚠ Geen bruikbare data gevonden in dataset na 2010.")
+
+    cumul_hist = maand_counts.cumsum()
+    laatste_hist_maand = cumul_hist.index.max()
+    forecast_start = laatste_hist_maand + pd.DateOffset(months=1)
+    forecast_index = pd.date_range(start=forecast_start, end=EINDDATUM, freq="MS")
+    h = len(forecast_index)
+
+    # ---------- Forecast containers ----------
+    forecast_median = pd.DataFrame(index=forecast_index)
+    forecast_lower = pd.DataFrame(index=forecast_index)
+    forecast_upper = pd.DataFrame(index=forecast_index)
+
+    # ---------- Voorspelling per brandstoftype ----------
+    for col in maand_counts.columns:
+        y = maand_counts[col].astype(float)
+        
+        if len(y) < 12:
+            print(f"⚠ Te weinig data voor {col}, gebruik lineaire extrapolatie.")
+            x = np.arange(len(y))
+            m, b = np.polyfit(x, y, 1)
+            future_x = np.arange(len(y), len(y) + h)
+            future_pred = np.maximum(b + m * future_x, 0)
+            conf_int = np.vstack([future_pred - y.std(), future_pred + y.std()]).T
+        else:
+            try:
+                model = SARIMAX(y, order=(1,1,1), seasonal_order=(1,1,0,12),
+                                enforce_stationarity=False, enforce_invertibility=False)
+                fit = model.fit(disp=False)
+                pred = fit.get_forecast(steps=h)
+                future_pred = np.maximum(pred.predicted_mean.values, 0)
+                conf_int = pred.conf_int(alpha=0.05).values
+            except Exception as e:
+                print(f"⚠ Fout bij modelleren van {col}: {e}, val terug op lineair model.")
+                x = np.arange(len(y))
+                m, b = np.polyfit(x, y, 1)
+                future_x = np.arange(len(y), len(y) + h)
+                future_pred = np.maximum(b + m * future_x, 0)
+                conf_int = np.vstack([future_pred - y.std(), future_pred + y.std()]).T
+        
+        last_cumul = cumul_hist[col].iloc[-1]
+        cumul_forecast = last_cumul + np.cumsum(future_pred)
+        cumul_lower = last_cumul + np.cumsum(np.maximum(conf_int[:,0], 0))
+        cumul_upper = last_cumul + np.cumsum(np.maximum(conf_int[:,1], 0))
+        
+        forecast_median[col] = cumul_forecast
+        forecast_lower[col] = cumul_lower
+        forecast_upper[col] = cumul_upper
+
+    # ---------- Plot ----------
+    plt.figure(figsize=(14,7))
+    for col in cumul_hist.columns:
+        plt.plot(cumul_hist.index, cumul_hist[col], linewidth=2, label=f"{col} (historisch)")
+        plt.plot(forecast_index, forecast_median[col], linestyle="--", linewidth=2, label=f"{col} (SARIMAX voorspelling)")
+        plt.fill_between(forecast_index, forecast_lower[col], forecast_upper[col], alpha=0.2)
+
+    plt.title("Voertuigregistraties per brandstoftype — Historisch + SARIMAX-voorspelling tot 2030")
+    plt.xlabel("Jaar")
+    plt.ylabel("Aantal voertuigen")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
