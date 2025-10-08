@@ -95,7 +95,7 @@ if page == "⚡️ Laadpalen":
         df = df.dropna(subset=['AddressInfo.Latitude', 'AddressInfo.Longitude'])
         return df
 
-    with st.spinner(f"🔌 Laad laadpalen voor {provincie_keuze}..."):
+    with st.spinner(f" Laad laadpalen voor {provincie_keuze}..."):
         Laadpalen = get_laadpalen_data(center_lat, center_lon, radius_km)
 
     # ---------------------
@@ -107,8 +107,8 @@ if page == "⚡️ Laadpalen":
     # 🌍 Kaart genereren
     # ---------------------
     st.write(f"📍 Provincie: **{provincie_keuze}** — gevonden laadpalen: **{len(Laadpalen)}**")
-    st.write(f"Standaardmodus toont maximaal **{MAX_DEFAULT}** laadpalen met details (popups + ⚡ icoon).")
-    st.write("Wil je Óveral alle laadpalen zien (snellere weergave, zonder popups)? Vink dan de checkbox aan.")
+    st.write(f"Standaardmodus toont maximaal **{MAX_DEFAULT}** laadpalen & popups.")
+    st.write("Toon alle laadpalen (zonder popups).")
 
     # 🔘 Checkbox: alle punten met FastMarkerCluster (snel, geen details)
     laad_alle = st.checkbox("🔄 Laad alle laadpalen (sneller, geen popups/details)", value=False)
@@ -136,7 +136,7 @@ if page == "⚡️ Laadpalen":
             # Let op: FastMarkerCluster gebruikt eenvoudige markers om performance te waarborgen.
         else:
             # ------------------------------------------------------------
-            # DETAIL: toon slechts een subset (MAX_DEFAULT) met popups + ⚡ icoontjes
+            # DETAIL: toon slechts een subset (MAX_DEFAULT) met popups
             # ------------------------------------------------------------
             if len(Laadpalen) > MAX_DEFAULT:
                 # sample of kies eerste N — hier gebruiken we reproducible sample
@@ -167,7 +167,7 @@ if page == "⚡️ Laadpalen":
                     icon=icon
                 ).add_to(marker_cluster)
 
-            st.success(f"Detailmodus: {len(subset_df)} laadpalen met popups en ⚡-icoon geladen.")
+            st.success(f"Detailmodus: {len(subset_df)} laadpalen met popups geladen.")
 
         # Render de kaart
         st_folium(m, width=900, height=650, returned_objects=["center", "zoom"])
