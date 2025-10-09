@@ -255,6 +255,7 @@ elif page == "🚘 Voertuigen":
 
     #-----Grafiek Lieke------
 
+    # --- Functie om type te bepalen ---
     def bepaal_type(merk, uitvoering):
         u = str(uitvoering).upper()
         m = str(merk).upper()
@@ -279,6 +280,44 @@ elif page == "🚘 Voertuigen":
             or "FA1FA1MD" in u
         ):
             return "Elektrisch"
+
+        # Diesel
+        if "DIESEL" in u or "TDI" in u or "CDI" in u or "DPE" in u or u.startswith("D"):
+            return "Diesel"
+
+        # Benzine (default)
+        return "Benzine"
+
+
+    # --- Data inladen ---
+    data = pd.read_csv("duitse_automerken_JA.csv")
+
+    # --- Type bepalen ---
+    data["Type"] = data.apply(lambda row: bepaal_type(row["Merk"], row["Uitvoering"]), axis=1)
+
+    # --- Datum verwerken ---
+    data["Datum eerste toelating"] = (
+        data["Datum eerste toelating"].astype(str).str.split(".").str[0]
+    )
+    data["Datum eerste toelating"] = pd.to_datetime(
+        data["Datum eerste toelating"], format="%Y%m%d", errors="coerce"
+    )
+    data = data.dropna(subset=["Datum eerste toelating"])
+    data = data[data["Datum eerste toelating"].dt.year > 2010]
+    data["Maand"] = data["Datum eerste toelating"].dt.to_period("M").dt.to_timestamp()
+
+    # --- Aggregatie ---
+    maand_aantal = data.groupby(["Maand", "Type"]).size().unstack(fill_value=0)
+    cumulatief = maand_aantal.cumsum()
+
+    # --- 📈 Grafiek tonen ---
+    st.write("Aantal voertuigen per maand (cumulatief):")
+    st.line_chart(cumulatief)
+
+    # --- Extra ---
+    st.write("Categorieën:", data["Type"].unique())
+    st.write(cumulatief.head())
+
 
 
    #-------------Grafiek Ann---------
