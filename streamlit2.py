@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import warnings
 import pickle
 import io
+import plotly.graph_objects as go
 
 # ------------------- Sidebar ---------------------------
 # ------------------------------------------------------
