@@ -133,7 +133,7 @@ if page == "⚡️ Laadpalen":
             Laadpalen = df
 
     MAX_DEFAULT = 300  
-    st.write(f"Provincie: **{provincie_keuze}** — gevonden laadpalen: **{len(Laadpalen)}**")
+    st.write(f"Provincie: **{provincie_keuze}**")
     laad_alle = st.checkbox("Laad alle laadpalen (geen popups)", value=False)
 
     if len(Laadpalen) == 0:
@@ -147,7 +147,7 @@ if page == "⚡️ Laadpalen":
         if laad_alle:
             coords = list(zip(Laadpalen["AddressInfo.Latitude"], Laadpalen["AddressInfo.Longitude"]))
             FastMarkerCluster(data=coords).add_to(m)
-            st.info(f"Snelmodus: alle {len(coords)} laadpalen getoond (geen popups).")
+            st.info(f"Snelmodus: alle laadpalen geladen (geen popups).")
         else:
             subset_df = Laadpalen.sample(n=min(len(Laadpalen), MAX_DEFAULT), random_state=1).reset_index(drop=True)
             marker_cluster = MarkerCluster().add_to(m)
@@ -253,15 +253,35 @@ elif page == "🚘 Voertuigen":
     st.write("Op deze pagina is informatie te vinden over elektrische auto's in Nederland.")
     st.markdown("---")
 
+    #-----Grafiek Lieke------
+
+    # --- DATA INLADEN ---
     data = pd.read_csv("duitse_automerken_JA.csv")
 
-    # --- Definieer herkenningspatronen per type ---
+    # --- FUNCTIE OM TYPE TE BEPALEN ---
     def bepaal_type(merk, uitvoering):
         u = str(uitvoering).upper()
         m = str(merk).upper()
 
         # Elektrisch
-        if "BMW I" in m or "PORSCHE" in m or u.startswith("FA1FA1CZ") or u.startswith("3EER") or u.startswith("3EDF") or u.startswith("3EDE") or u.startswith("2EER") or u.startswith("2EDF") or u.startswith("2EDE") or u.startswith("E11") or u.startswith("0AW5") or u.startswith("QE2QE2G1") or u.startswith("QE1QE1G1") or u.startswith("HE1HE1G1") or "EV" in u or "FA1FA1MD" in u or "FA1FA1CZ" in u:
+        if (
+            "BMW I" in m
+            or "PORSCHE" in m
+            or u.startswith("FA1FA1CZ")
+            or u.startswith("3EER")
+            or u.startswith("3EDF")
+            or u.startswith("3EDE")
+            or u.startswith("2EER")
+            or u.startswith("2EDF")
+            or u.startswith("2EDE")
+            or u.startswith("E11")
+            or u.startswith("0AW5")
+            or u.startswith("QE2QE2G1")
+            or u.startswith("QE1QE1G1")
+            or u.startswith("HE1HE1G1")
+            or "EV" in u
+            or "FA1FA1MD" in u
+        ):
             return "Elektrisch"
 
         # Diesel
@@ -271,43 +291,44 @@ elif page == "🚘 Voertuigen":
         # Benzine (default)
         return "Benzine"
 
-    # 🧩 Pas de functie toe op je DataFrame
+    # 🧩 Pas functie toe
     data["Type"] = data.apply(lambda row: bepaal_type(row["Merk"], row["Uitvoering"]), axis=1)
 
-
-    # --- CATEGORIEËN CONTROLEREN ---
-    # Verzekeren dat Type kolom Elektrisch/Hybride/Benzine/Diesel bevat
-    st.write("Beschikbare brandstofcategorieën:", data["Type"].unique())
-
-
-    # Zet om naar string en verwijder eventuele .0
-    data["Datum eerste toelating"] = data["Datum eerste toelating"].astype(str).str.split(".").str[0]
-
-    # Converteer naar datetime met format YYYYMMDD
+    # --- DATUM CONVERSIE ---
+    data["Datum eerste toelating"] = (
+        data["Datum eerste toelating"].astype(str).str.split(".").str[0]
+    )
     data["Datum eerste toelating"] = pd.to_datetime(
         data["Datum eerste toelating"], format="%Y%m%d", errors="coerce"
     )
-
-    # Eventuele lege of niet-parseerbare datums verwijderen
     data = data.dropna(subset=["Datum eerste toelating"])
-
-    # **Filteren op datum > 2010**
     data = data[data["Datum eerste toelating"].dt.year > 2010]
-
-    # Nu kun je Maand kolom maken
     data["Maand"] = data["Datum eerste toelating"].dt.to_period("M").dt.to_timestamp()
 
-    # Tel aantal voertuigen per maand en brandstoftype
-    maand_aantal = data.groupby(["Maand", "Type"]).size().unstack(fill_value=0)
+    # --- 🔹 MERKEN SELECTIE MENU ---
+    alle_merknamen = sorted(data["Merk"].unique())
+    geselecteerde_merknamen = st.multiselect(
+        "Selecteer automerken om te tonen:",
+        options=alle_merknamen,
+        default=["VOLKSWAGEN", "AUDI", "BMW"]  # voorbeeld default selectie
+    )
 
-    # --- CUMULATIEVE SOM BEREKENEN ---
+    # Filter de data op geselecteerde merken
+    if geselecteerde_merknamen:
+        data = data[data["Merk"].isin(geselecteerde_merknamen)]
+
+    # --- AGGREGATIE ---
+    maand_aantal = data.groupby(["Maand", "Type"]).size().unstack(fill_value=0)
     cumulatief = maand_aantal.cumsum()
 
-    # --- LIJNDIAGRAM MET STREAMLIT ---
+    # --- 📈 GRAFIEK ---
     st.line_chart(cumulatief)
 
     # --- EXTRA INFO ---
+    st.write("Geselecteerde merken:", geselecteerde_merknamen)
+    st.write("Beschikbare brandstofcategorieën:", data["Type"].unique())
     st.write("Data voorbeeld:", cumulatief.head())
+
 
    #-------------Grafiek Ann---------
     st.write("Analyseer laadsessies per uur en bekijk jaaroverzicht van totale geladen energie.")
