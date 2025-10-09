@@ -258,8 +258,10 @@ if page == "⚡️ Laadpalen":
         st.warning("Kon geen landelijke data laden voor de grafiek.")
     # ---- DATA BEKIJKEN ----
     with st.expander("📊 Bekijk gebruikte data (OpenChargeMap API)"):
-            st.dataframe(df_all)
-
+        if 'df_all' in locals() and not df_all.empty:
+            st.dataframe(df_all, use_container_width=True)
+        else:
+            st.warning("Geen data beschikbaar (API gaf geen resultaten terug).")
 
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
