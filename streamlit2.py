@@ -255,10 +255,6 @@ elif page == "🚘 Voertuigen":
 
     #-----Grafiek Lieke------
 
-    # --- DATA INLADEN ---
-    data = pd.read_csv("duitse_automerken_JA.csv")
-
-    # --- FUNCTIE OM TYPE TE BEPALEN ---
     def bepaal_type(merk, uitvoering):
         u = str(uitvoering).upper()
         m = str(merk).upper()
@@ -283,51 +279,6 @@ elif page == "🚘 Voertuigen":
             or "FA1FA1MD" in u
         ):
             return "Elektrisch"
-
-        # Diesel
-        if "DIESEL" in u or "TDI" in u or "CDI" in u or "DPE" in u or u.startswith("D"):
-            return "Diesel"
-
-        # Benzine (default)
-        return "Benzine"
-
-    # 🧩 Pas functie toe
-    data["Type"] = data.apply(lambda row: bepaal_type(row["Merk"], row["Uitvoering"]), axis=1)
-
-    # --- DATUM CONVERSIE ---
-    data["Datum eerste toelating"] = (
-        data["Datum eerste toelating"].astype(str).str.split(".").str[0]
-    )
-    data["Datum eerste toelating"] = pd.to_datetime(
-        data["Datum eerste toelating"], format="%Y%m%d", errors="coerce"
-    )
-    data = data.dropna(subset=["Datum eerste toelating"])
-    data = data[data["Datum eerste toelating"].dt.year > 2010]
-    data["Maand"] = data["Datum eerste toelating"].dt.to_period("M").dt.to_timestamp()
-
-    # --- 🔹 MERKEN SELECTIE MENU ---
-    alle_merknamen = sorted(data["Merk"].unique())
-    geselecteerde_merknamen = st.multiselect(
-        "Selecteer automerken om te tonen:",
-        options=alle_merknamen,
-        default=["VOLKSWAGEN", "AUDI", "BMW"]  # voorbeeld default selectie
-    )
-
-    # Filter de data op geselecteerde merken
-    if geselecteerde_merknamen:
-        data = data[data["Merk"].isin(geselecteerde_merknamen)]
-
-    # --- AGGREGATIE ---
-    maand_aantal = data.groupby(["Maand", "Type"]).size().unstack(fill_value=0)
-    cumulatief = maand_aantal.cumsum()
-
-    # --- 📈 GRAFIEK ---
-    st.line_chart(cumulatief)
-
-    # --- EXTRA INFO ---
-    st.write("Geselecteerde merken:", geselecteerde_merknamen)
-    st.write("Beschikbare brandstofcategorieën:", data["Type"].unique())
-    st.write("Data voorbeeld:", cumulatief.head())
 
 
    #-------------Grafiek Ann---------
