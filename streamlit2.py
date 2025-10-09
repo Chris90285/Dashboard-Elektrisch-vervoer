@@ -256,7 +256,9 @@ if page == "⚡️ Laadpalen":
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("Kon geen landelijke data laden voor de grafiek.")
-
+    # ---- DATA BEKIJKEN ----
+    with st.expander("📊 Bekijk gebruikte data (OpenChargeMap API)"):
+            st.dataframe(df)
 
 
 # ------------------- Pagina 2 --------------------------
@@ -339,6 +341,10 @@ elif page == "🚘 Voertuigen":
     # --- 📈 Titel + Grafiek ---
     st.subheader("Cumulatief aantal voertuigen per maand")
     st.line_chart(cumulatief)
+
+    # ---- DATA BEKIJKEN ----
+    with st.expander("📊 Bekijk gebruikte data (cars.pkl opgeschoond)"):
+            st.dataframe(data)
 
 
    #-------------Grafiek Ann---------
@@ -446,7 +452,7 @@ elif page == "🚘 Voertuigen":
         st.plotly_chart(fig4, use_container_width=True)
 
         # ---- DATA BEKIJKEN ----
-        with st.expander("📊 Bekijk gebruikte data"):
+        with st.expander("📊 Bekijk gebruikte data (Charging_data.pkl)"):
             st.dataframe(ev_filtered)
 
     except Exception as e:
@@ -667,3 +673,7 @@ elif page == "📊 Voorspellend model":
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+    # ---- DATA BEKIJKEN ----
+    with st.expander("📊 Bekijk gebruikte data (cars.pkl opgeschoond)"):
+            st.dataframe(data)
