@@ -20,14 +20,87 @@ import pickle
 import io
 import plotly.graph_objects as go
 
-# ------------------- Sidebar ---------------------------
-# ------------------------------------------------------
+# ======================================================
+#                 PAGINA STYLING 
+# ======================================================
+
+st.set_page_config(
+    page_title="Laadpalen & EV Dashboard",
+    page_icon="🔋",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# --- Algemene styling (rustig en modern) ---
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+:root {
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --accent: #0ea5a4;
+  --text: #0f172a;
+  --muted: #6b7280;
+}
+
+html, body, [class*="css"] {
+  font-family: 'Inter', sans-serif;
+  color: var(--text);
+  background-color: var(--bg);
+}
+
+div.block-container {
+  padding-top: 1.5rem;
+  padding-bottom: 2rem;
+  max-width: 1250px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+section[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  padding-top: 20px;
+  border-right: 1px solid rgba(2,6,23,0.04);
+}
+
+h1, h2, h3 {
+  color: var(--text);
+  font-weight: 600;
+}
+
+hr {
+  border: none;
+  height: 1px;
+  background: rgba(2,6,23,0.08);
+  margin: 1rem 0;
+}
+
+.stButton>button {
+  border-radius: 10px;
+  padding: 8px 16px;
+  font-weight: 600;
+}
+
+.stSelectbox, .stMultiselect, .stSlider {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+small, .small { color: var(--muted); font-size: 13px; }
+</style>
+""", unsafe_allow_html=True)
+
+
+# ======================================================
+#                   SIDEBAR
+# ======================================================
 with st.sidebar:
-    st.markdown("## Laadpalen & Elektrische Voertuigen")
+    st.markdown("## ⚡️ Laadpalen & Elektrische Voertuigen")
     st.markdown("---")
 
     page = st.selectbox(
-        "Selecteer een pagina",
+        "Navigatie",
         [
             "⚡️ Laadpalen",
             "🚘 Voertuigen",
@@ -35,11 +108,10 @@ with st.sidebar:
         ]
     )
 
-    st.write("")
-    st.info("🔋 Data afkomstig van OpenChargeMap & RDW")
+    st.markdown("### ℹ️ Informatie")
+    st.info("Data afkomstig van OpenChargeMap & RDW")
     st.markdown("---")
-    st.write("Voor het laatst geüpdatet op:")
-    st.write("*09 okt 2025*")
+    st.caption("Voor het laatst geüpdatet op: 9 okt 2025")
 
 
 # ------------------- Data inladen -----------------------
