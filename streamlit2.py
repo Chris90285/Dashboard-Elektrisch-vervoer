@@ -20,87 +20,82 @@ import pickle
 import io
 import plotly.graph_objects as go
 
+
 # ======================================================
-#                 PAGINA STYLING 
+# DASHBOARD: Laadpalen & Elektrische Voertuigen (Stijlverbeterd)
 # ======================================================
 
+import streamlit as st
+
+# ------------------- Algemene instellingen -------------
 st.set_page_config(
-    page_title="Laadpalen & EV Dashboard",
-    page_icon="🔋",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Laadpalen & Elektrische Voertuigen",
+    page_icon="⚡",
+    layout="wide"
 )
 
-# --- Algemene styling (rustig en modern) ---
+# ------------------- Custom CSS ------------------------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
 
-:root {
-  --bg: #f8fafc;
-  --card: #ffffff;
-  --accent: #0ea5a4;
-  --text: #0f172a;
-  --muted: #6b7280;
-}
+    [data-testid="stSidebar"] {
+        background-color: #f9fafb !important;
+        border-right: 1px solid #e5e7eb;
+        padding: 1.5rem 1rem;
+    }
 
-html, body, [class*="css"] {
-  font-family: 'Inter', sans-serif;
-  color: var(--text);
-  background-color: var(--bg);
-}
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2 {
+        color: #1e293b !important;
+    }
 
-div.block-container {
-  padding-top: 1.5rem;
-  padding-bottom: 2rem;
-  max-width: 1250px;
-  margin-left: auto;
-  margin-right: auto;
-}
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        max-width: 1300px;
+    }
 
-section[data-testid="stSidebar"] {
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  padding-top: 20px;
-  border-right: 1px solid rgba(2,6,23,0.04);
-}
+    h1, h2, h3 {
+        color: #1e293b;
+        font-weight: 600;
+    }
 
-h1, h2, h3 {
-  color: var(--text);
-  font-weight: 600;
-}
+    .stAlert {
+        border-radius: 10px !important;
+    }
 
-hr {
-  border: none;
-  height: 1px;
-  background: rgba(2,6,23,0.08);
-  margin: 1rem 0;
-}
+    .stSelectbox, .stMultiSelect, .stSlider {
+        margin-top: 0.5rem !important;
+        margin-bottom: 1.5rem !important;
+    }
 
-.stButton>button {
-  border-radius: 10px;
-  padding: 8px 16px;
-  font-weight: 600;
-}
+    .plotly {
+        border-radius: 12px;
+        background-color: #fff;
+        padding: 0.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
 
-.stSelectbox, .stMultiselect, .stSlider {
-  margin-top: 0.5rem;
-  margin-bottom: 0.5rem;
-}
+    hr, .stMarkdown hr {
+        border-top: 1px solid #e5e7eb !important;
+    }
 
-small, .small { color: var(--muted); font-size: 13px; }
+    small {
+        color: #64748b;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-
-# ======================================================
-#                   SIDEBAR
-# ======================================================
+# ------------------- Sidebar ---------------------------
+# ------------------------------------------------------
 with st.sidebar:
-    st.markdown("## ⚡️ Laadpalen & Elektrische Voertuigen")
+    st.markdown("## Laadpalen & Elektrische Voertuigen")
     st.markdown("---")
 
     page = st.selectbox(
-        "Navigatie",
+        "Selecteer een pagina",
         [
             "⚡️ Laadpalen",
             "🚘 Voertuigen",
@@ -108,10 +103,11 @@ with st.sidebar:
         ]
     )
 
-    st.markdown("### ℹ️ Informatie")
-    st.info("Data afkomstig van OpenChargeMap & RDW")
+    st.write("")
+    st.info("🔋 Data afkomstig van OpenChargeMap & RDW")
     st.markdown("---")
-    st.caption("Voor het laatst geüpdatet op: 9 okt 2025")
+    st.write("Voor het laatst geüpdatet op:")
+    st.write("*09 okt 2025*")
 
 
 # ------------------- Data inladen -----------------------
@@ -495,7 +491,6 @@ elif page == "🚘 Voertuigen":
 
         # Controleer aantal unieke maanden
         unique_months = energy_by_month["month"].nunique()
-        st.caption(f"Aantal maanden in dataset: {unique_months}")
 
         fig2 = px.bar(energy_by_month, x="month", y=energy_col)
         fig2.update_xaxes(type="category", title_text="Maand")
@@ -747,5 +742,3 @@ elif page == "📊 Voorspellend model":
     )
 
     st.plotly_chart(fig, use_container_width=True)
-
-
