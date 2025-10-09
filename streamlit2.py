@@ -489,43 +489,46 @@ elif page == "📊 Voorspellend model":
     h = len(forecast_index)
 
     forecast_median_charging = pd.DataFrame(index=forecast_index)
-    forecast_lower_charging = pd.DataFrame(index=forecast_index)
-    forecast_upper_charging = pd.DataFrame(index=forecast_index)
 
-    # ---------- SARIMAX voorspelling ----------
+    # ---------- Aangepast voorspellingsmodel ----------
     for col in maand_counts_charging.columns:
         y = maand_counts_charging[col].astype(float)
 
-        if len(y) < 12:
-            x = np.arange(len(y))
-            m, b = np.polyfit(x, y, 1)
-            future_x = np.arange(len(y), len(y) + h)
-            future_pred = np.maximum(b + m * future_x, 0)
-            conf_int = np.vstack([future_pred - y.std(), future_pred + y.std()]).T
-        else:
-            try:
+        try:
+            if len(y) < 12:
+                # Lineair model fallback
+                x = np.arange(len(y))
+                m, b = np.polyfit(x, y, 1)
+                future_x = np.arange(len(y), len(y) + h)
+                future_pred = np.maximum(b + m * future_x, 0)
+            else:
                 model = SARIMAX(y, order=(1,1,1), seasonal_order=(1,1,0,12),
                                 enforce_stationarity=False, enforce_invertibility=False)
                 fit = model.fit(disp=False)
                 pred = fit.get_forecast(steps=h)
                 future_pred = np.maximum(pred.predicted_mean.values, 0)
-                conf_int = pred.conf_int(alpha=alpha).values
-            except Exception as e:
-                st.warning(f"⚠ Fout bij modelleren van {col}: {e}, val terug op lineair model.")
-                x = np.arange(len(y))
-                m, b = np.polyfit(x, y, 1)
-                future_x = np.arange(len(y), len(y) + h)
-                future_pred = np.maximum(b + m * future_x, 0)
-                conf_int = np.vstack([future_pred - y.std(), future_pred + y.std()]).T
+        except Exception as e:
+            st.warning(f"⚠ Fout bij modelleren van {col}: {e}, val terug op lineair model.")
+            x = np.arange(len(y))
+            m, b = np.polyfit(x, y, 1)
+            future_x = np.arange(len(y), len(y) + h)
+            future_pred = np.maximum(b + m * future_x, 0)
 
+        # ---------- Trendaanpassingen ----------
+        if col.lower() == "elektrisch":
+            # Versnelde groei: verdubbel groei richting 2050
+            groeifactor = np.linspace(1, 2.5, h)
+            future_pred = future_pred * groeifactor
+        elif col.lower() in ["benzine", "diesel"]:
+            # Langzame afbouw (negatieve groei richting 2050)
+            afbouwfactor = np.linspace(1, 0.6, h)
+            future_pred = future_pred * afbouwfactor
+
+        # Cumulatieve voortzetting
         last_cumul = cumul_hist_charging[col].iloc[-1]
         cumul_forecast = last_cumul + np.cumsum(future_pred)
-        cumul_lower = last_cumul + np.cumsum(np.maximum(conf_int[:,0], 0))
-        cumul_upper = last_cumul + np.cumsum(np.maximum(conf_int[:,1], 0))
 
         forecast_median_charging[col] = cumul_forecast
-        forecast_lower_charging[col] = cumul_lower
-        forecast_upper_charging[col] = cumul_upper
 
     # ---------- Interactieve selectie categorieën ----------
     categorieen = st.multiselect(
@@ -553,22 +556,13 @@ elif page == "📊 Voorspellend model":
             line=dict(dash="dash"),
             name=f"{col} (voorspelling)"
         ))
-        # Onzekerheidsinterval
-        fig.add_trace(go.Scatter(
-            x=list(forecast_index) + list(forecast_index[::-1]),
-            y=list(forecast_lower_charging[col]) + list(forecast_upper_charging[col][::-1]),
-            fill="toself",
-            fillcolor="rgba(0,100,80,0.2)",
-            line=dict(color="rgba(255,255,255,0)"),
-            name=f"{col} onzekerheidsinterval",
-            showlegend=False
-        ))
 
     fig.update_layout(
         title=f"Voertuigregistraties per brandstoftype — Historisch + voorspelling tot {eindjaar}",
         xaxis_title="Jaar",
         yaxis_title="Aantal voertuigen",
-        hovermode="x unified"
+        hovermode="x unified",
+        height=700  # Grotere grafiek
     )
 
     st.plotly_chart(fig, use_container_width=True)
