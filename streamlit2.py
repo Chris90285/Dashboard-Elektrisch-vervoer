@@ -431,7 +431,6 @@ elif page == "🚘 Voertuigen":
     except Exception as e:
         st.error(f"Er is een fout opgetreden bij het inlezen van `{file_path}`: {e}")
 
-
 # ------------------- Pagina 3 --------------------------
 elif page == "📊 Voorspellend model":
     st.markdown("## Voorspellend Model")
@@ -443,7 +442,6 @@ elif page == "📊 Voorspellend model":
     # ---------- Interactieve instellingen ----------
     eindjaar = st.slider("Voorspellen tot jaar", 2025, 2050, 2030)
     EINDDATUM = pd.Timestamp(f"{eindjaar}-12-01")
-    alpha = st.selectbox("Onzekerheidsinterval", [0.05, 0.1, 0.2], format_func=lambda x: f"{int((1-x)*100)}%")
 
     # ---------- Kopie gebruiken ----------
     df_auto_kopie = df_auto.copy()
@@ -454,7 +452,7 @@ elif page == "📊 Voorspellend model":
         m = str(merk).upper()
         if ("BMW I" in m or "PORSCHE" in m or
             u.startswith(("FA1FA1CZ","3EER","3EDF","3EDE","2EER","2EDF","2EDE",
-                        "E11","0AW5","QE2QE2G1","QE1QE1G1","HE1HE1G1")) or
+                          "E11","0AW5","QE2QE2G1","QE1QE1G1","HE1HE1G1")) or
             "EV" in u or "FA1FA1MD" in u):
             return "Elektrisch"
         if "DIESEL" in u or "TDI" in u or "CDI" in u or "DPE" in u or u.startswith("D"):
@@ -481,53 +479,138 @@ elif page == "📊 Voorspellend model":
         st.error("⚠ Geen bruikbare data gevonden in dataset na 2010.")
         st.stop()
 
-    # ---------- Berekeningen ----------
+    # ---------- Historische cumulatieven ----------
     cumul_hist_charging = maand_counts_charging.cumsum()
     laatste_hist_maand = cumul_hist_charging.index.max()
     forecast_start = laatste_hist_maand + pd.DateOffset(months=1)
+    if forecast_start > EINDDATUM:
+        st.error("⚠ Het gekozen eindjaar ligt vóór de laatste beschikbare data. Kies een later jaar.")
+        st.stop()
+
     forecast_index = pd.date_range(start=forecast_start, end=EINDDATUM, freq="MS")
     h = len(forecast_index)
+    if h <= 0:
+        st.error("⚠ Geen forecast-horizon (controleer eindjaar).")
+        st.stop()
 
-    forecast_median_charging = pd.DataFrame(index=forecast_index)
+    # ---------- Voorspel totaal aantal maandelijkse registraties ----------
+    totale_maand = maand_counts_charging.sum(axis=1).astype(float)
 
-    # ---------- Aangepast voorspellingsmodel ----------
-    for col in maand_counts_charging.columns:
-        y = maand_counts_charging[col].astype(float)
-
-        try:
-            if len(y) < 12:
-                # Lineair model fallback
-                x = np.arange(len(y))
-                m, b = np.polyfit(x, y, 1)
-                future_x = np.arange(len(y), len(y) + h)
-                future_pred = np.maximum(b + m * future_x, 0)
-            else:
-                model = SARIMAX(y, order=(1,1,1), seasonal_order=(1,1,0,12),
+    # probeer SARIMAX op totaal
+    try:
+        if len(totale_maand) >= 24:
+            model_tot = SARIMAX(totale_maand, order=(1,1,1), seasonal_order=(1,1,0,12),
                                 enforce_stationarity=False, enforce_invertibility=False)
-                fit = model.fit(disp=False)
-                pred = fit.get_forecast(steps=h)
-                future_pred = np.maximum(pred.predicted_mean.values, 0)
-        except Exception as e:
-            st.warning(f"⚠ Fout bij modelleren van {col}: {e}, val terug op lineair model.")
-            x = np.arange(len(y))
-            m, b = np.polyfit(x, y, 1)
-            future_x = np.arange(len(y), len(y) + h)
-            future_pred = np.maximum(b + m * future_x, 0)
+            fit_tot = model_tot.fit(disp=False)
+            pred_tot = fit_tot.get_forecast(steps=h).predicted_mean.values
+        else:
+            # te weinig data: eenvoudige lineaire extrapolatie
+            x = np.arange(len(totale_maand))
+            m_tot, b_tot = np.polyfit(x, totale_maand, 1)
+            future_x = np.arange(len(totale_maand), len(totale_maand) + h)
+            pred_tot = b_tot + m_tot * future_x
+    except Exception:
+        # fallback lineair
+        x = np.arange(len(totale_maand))
+        m_tot, b_tot = np.polyfit(x, totale_maand, 1)
+        future_x = np.arange(len(totale_maand), len(totale_maand) + h)
+        pred_tot = b_tot + m_tot * future_x
 
-        # ---------- Trendaanpassingen ----------
-        if col.lower() == "elektrisch":
-            # Versnelde groei: verdubbel groei richting 2050
-            groeifactor = np.linspace(1, 2.5, h)
-            future_pred = future_pred * groeifactor
-        elif col.lower() in ["benzine", "diesel"]:
-            # Langzame afbouw (negatieve groei richting 2050)
-            afbouwfactor = np.linspace(1, 0.6, h)
-            future_pred = future_pred * afbouwfactor
+    pred_tot = np.maximum(pred_tot, 0.0)  # geen negatieve aantallen
+    pred_tot_series = pd.Series(pred_tot, index=forecast_index)
 
-        # Cumulatieve voortzetting
-        last_cumul = cumul_hist_charging[col].iloc[-1]
-        cumul_forecast = last_cumul + np.cumsum(future_pred)
+    # ---------- Marktaandeel-curves (zodat EV omhoog, fossiel omlaag) ----------
+    types = maand_counts_charging.columns.tolist()
 
+    # huidige shares (laatste maand met data). als die nul zijn, gebruik gemiddelde laatste 12 maanden
+    last_counts = maand_counts_charging.iloc[-1].astype(float)
+    last_total = last_counts.sum()
+    if last_total <= 0:
+        last_12 = maand_counts_charging.tail(12).sum().astype(float)
+        if last_12.sum() > 0:
+            current_shares = (last_12 / last_12.sum()).to_dict()
+        else:
+            # fallback gelijke verdeling
+            current_shares = {t: 1.0/len(types) for t in types}
+    else:
+        current_shares = (last_counts / last_total).to_dict()
+
+    # bouw streefaandelen: we willen EV laten domineren in 2050, fossiel sterk verkleinen
+    non_ev_targets = {}
+    for t in types:
+        if t == "Elektrisch":
+            continue
+        cur = current_shares.get(t, 0.0)
+        if t == "Benzine":
+            non_ev_targets[t] = cur * 0.15   # benzine sterk verkleinen (naar ~15% van huidig)
+        elif t == "Diesel":
+            non_ev_targets[t] = cur * 0.10   # diesel nog sterker omlaag
+        else:
+            non_ev_targets[t] = cur * 0.25   # overige types matig omlaag
+
+    sum_non_ev_targets = sum(non_ev_targets.values())
+    # geef EV de rest (zorg dat het tussen 0.75 en 0.98 blijft)
+    ev_target = max(0.75, min(0.98, 1.0 - sum_non_ev_targets))
+    # als er geen 'Elektrisch' type in data: verdeel ev_target over anderen (geen EV in data)
+    if "Elektrisch" not in types:
+        # verdeel ev_target proportioneel over niet-EV types (maar we willen toch dat fossiel daalt)
+        # we al hebben non_ev_targets; normaliseer naar 1
+        scale = 1.0 / sum_non_ev_targets if sum_non_ev_targets > 0 else 1.0 / max(1, len(types))
+        for t in non_ev_targets:
+            non_ev_targets[t] = non_ev_targets[t] * scale
+        ev_target = 0.0
+
+    # nu maak target dict per type
+    targets = {}
+    for t in types:
+        if t == "Elektrisch":
+            targets[t] = ev_target
+        else:
+            targets[t] = non_ev_targets.get(t, 0.0)
+
+    # safety: als som targets != 1 door afronding, normalize licht
+    total_target_sum = sum(targets.values())
+    if total_target_sum <= 0:
+        # fallback: gelijke verdeling
+        targets = {t: 1.0/len(types) for t in types}
+    else:
+        targets = {t: targets[t]/total_target_sum for t in types}
+
+    # bouw de sigmoid-curve over de horizon (t=0..1)
+    t_frac = np.linspace(0, 1, h)
+    k = 7.0  # steilheid; groter = snellere overgang
+    sigmoid = 1.0 / (1.0 + np.exp(-k*(t_frac - 0.5)))  # loopt van ~0 -> ~1
+
+    # share time-series: start bij current_shares, eindig bij targets, met sigmoid-vorm
+    share_dict = {}
+    for t in types:
+        cur = current_shares.get(t, 0.0)
+        targ = targets.get(t, 0.0)
+        # zachte overgang: share(t) = cur + (targ - cur) * sigmoid(t)
+        share_dict[t] = cur + (targ - cur) * sigmoid
+
+    shares_df = pd.DataFrame(share_dict, index=forecast_index)
+
+    # normaliseer per rij zodat som precies 1 is (en corrigeer rijen met sum 0)
+    row_sums = shares_df.sum(axis=1)
+    zero_rows = row_sums == 0
+    if zero_rows.any():
+        # vul deze rijen met huidige shares (genormaliseerd)
+        fallback = pd.Series(current_shares)
+        fallback = fallback / fallback.sum() if fallback.sum() > 0 else fallback.fillna(1.0/len(types))
+        shares_df.loc[zero_rows, :] = fallback.values
+        row_sums = shares_df.sum(axis=1)
+    shares_df = shares_df.div(row_sums, axis=0)
+
+    # ---------- Verdeel totale voorspelling over types volgens shares ----------
+    future_alloc = shares_df.multiply(pred_tot_series, axis=0)  # per maand counts per type
+
+    # ---------- Bouw cumulatieve voorspellingen per type ----------
+    forecast_median_charging = pd.DataFrame(index=forecast_index, columns=types)
+    for col in types:
+        future_monthly = future_alloc[col].fillna(0).values
+        last_cumul = cumul_hist_charging[col].iloc[-1] if col in cumul_hist_charging.columns else 0
+        cumul_forecast = last_cumul + np.cumsum(np.maximum(future_monthly, 0.0))
         forecast_median_charging[col] = cumul_forecast
 
     # ---------- Interactieve selectie categorieën ----------
@@ -537,32 +620,57 @@ elif page == "📊 Voorspellend model":
         default=maand_counts_charging.columns.tolist()
     )
 
-    # ---------- Plotly grafiek ----------
+    # ---------- Plotly grafiek (geen onzekerheidsinterval meer) ----------
     fig = go.Figure()
 
     for col in categorieen:
-        # Historisch
+        # Historisch (cumulatief)
         fig.add_trace(go.Scatter(
             x=cumul_hist_charging.index,
             y=cumul_hist_charging[col],
             mode="lines",
-            name=f"{col} (historisch)"
+            name=f"{col} (historisch)",
+            line=dict(width=2)
         ))
-        # Voorspelling
+        # Voorspelling (cumulatief)
         fig.add_trace(go.Scatter(
             x=forecast_index,
-            y=forecast_median_charging[col],
+            y=forecast_median_charging[col].astype(float),
             mode="lines",
-            line=dict(dash="dash"),
+            line=dict(dash="dash", width=3),
             name=f"{col} (voorspelling)"
         ))
 
     fig.update_layout(
         title=f"Voertuigregistraties per brandstoftype — Historisch + voorspelling tot {eindjaar}",
         xaxis_title="Jaar",
-        yaxis_title="Aantal voertuigen",
+        yaxis_title="Aantal voertuigen (cumulatief)",
         hovermode="x unified",
-        height=700  # Grotere grafiek
+        height=720  # grotere grafiek
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+    # ---------- Extra: toon voorspelde marktaandelen in 2030/2040/2050 (optioneel) ----------
+    if st.checkbox("Toon geschatte marktaandelen (2030/2040/2050)"):
+        # vind rijen dicht bij die jaren in forecast_index
+        def nearest_row(year):
+            target = pd.Timestamp(f"{year}-01-01")
+            if target < forecast_index[0]:
+                idx = 0
+            else:
+                idx = np.argmin(np.abs((forecast_index - target).days))
+            return shares_df.iloc[idx]
+
+        cols = ["Type", "2030", "2040", str(eindjaar)]
+        rows = []
+        for t in types:
+            row = {
+                "Type": t,
+                "2030": f"{nearest_row(2030).get(t,0.0)*100:.1f}%",
+                "2040": f"{nearest_row(2040).get(t,0.0)*100:.1f}%",
+                str(eindjaar): f"{shares_df.iloc[-1].get(t,0.0)*100:.1f}%"
+            }
+            rows.append(row)
+        df_shares = pd.DataFrame(rows)
+        st.table(df_shares.set_index("Type"))
