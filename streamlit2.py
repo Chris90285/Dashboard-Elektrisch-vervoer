@@ -322,12 +322,12 @@ elif page == "🚘 Voertuigen":
     cumulatief = maand_aantal.cumsum()
 
     # --- 📈 Titel + Grafiek ---
-    st.markdown("## 📊 Cumulatief aantal voertuigen per maand (gefilterd op geselecteerde merken)")
+    st.subheader("Cumulatief aantal voertuigen per maand")
     st.line_chart(cumulatief)
 
 
    #-------------Grafiek Ann---------
-    
+
     # ---- Bestand vast instellen ----
     file_path = "Charging_data.pkl"
 
@@ -358,8 +358,8 @@ elif page == "🚘 Voertuigen":
 
         energy_col = "energy_delivered [kwh]"
 
-        # ---- HEATMAP: Laadsessies per dag/uur ----
-        st.subheader("📊 Heatmap: Laadsessies per dag van de week en uur van de dag")
+        # ---- HEATMAP: Laadpatronen per dag en uur ----
+        st.subheader("📊 Heatmap: Laadpatronen per dag en uur")
         heatmap_data = ev_data.groupby(["weekday", "hour"]).size().reset_index(name="count")
 
         # Zorg voor juiste volgorde van dagen
@@ -371,10 +371,14 @@ elif page == "🚘 Voertuigen":
             x="hour",
             y="weekday",
             z="count",
-            color_continuous_scale="Blues",
-            title="Laadsessies (dag vs uur)"
+            color_continuous_scale=[[0, "#1f77b4"], [0.5, "#ffff00"], [1, "#d62728"]],  # koel blauw -> geel -> rood
+            title="Laadpatronen (weekdag vs uur)"
         )
         fig_hm = force_integer_xaxis(fig_hm)
+
+        # Pas de kleurenschaal aan
+        fig_hm.update_coloraxes(colorbar_title="Laadgebruik", colorbar_title_side="top")
+
         st.plotly_chart(fig_hm, use_container_width=True)
 
         # ---- FILTERS ----
@@ -433,13 +437,12 @@ elif page == "📊 Voorspellend model":
     st.markdown("---")
     st.subheader("Voorspelling auto's in Nederland per brandstofcategorie")
 
-    #-------Voorspellend model Koen-------
-
     warnings.filterwarnings("ignore")
 
-    # ---------- Instellingen ----------
-    EINDDATUM = pd.Timestamp("2030-12-01")
-
+    # ---------- Interactieve instellingen ----------
+    eindjaar = st.sidebar.slider("Voorspellen tot jaar", 2025, 2040, 2030)
+    EINDDATUM = pd.Timestamp(f"{eindjaar}-12-01")
+    alpha = st.sidebar.selectbox("Onzekerheidsinterval", [0.05, 0.1, 0.2], format_func=lambda x: f"{int((1-x)*100)}%")
 
     # ---------- Kopie gebruiken ----------
     df_auto_kopie = df_auto.copy()
@@ -493,7 +496,6 @@ elif page == "📊 Voorspellend model":
         y = maand_counts_charging[col].astype(float)
 
         if len(y) < 12:
-            st.warning(f"⚠ Te weinig data voor {col}, gebruik lineaire extrapolatie.")
             x = np.arange(len(y))
             m, b = np.polyfit(x, y, 1)
             future_x = np.arange(len(y), len(y) + h)
@@ -506,7 +508,7 @@ elif page == "📊 Voorspellend model":
                 fit = model.fit(disp=False)
                 pred = fit.get_forecast(steps=h)
                 future_pred = np.maximum(pred.predicted_mean.values, 0)
-                conf_int = pred.conf_int(alpha=0.05).values
+                conf_int = pred.conf_int(alpha=alpha).values
             except Exception as e:
                 st.warning(f"⚠ Fout bij modelleren van {col}: {e}, val terug op lineair model.")
                 x = np.arange(len(y))
@@ -524,17 +526,48 @@ elif page == "📊 Voorspellend model":
         forecast_lower_charging[col] = cumul_lower
         forecast_upper_charging[col] = cumul_upper
 
-    # ---------- Plot ----------
-    plt.figure(figsize=(14,7))
-    for col in cumul_hist_charging.columns:
-        plt.plot(cumul_hist_charging.index, cumul_hist_charging[col], linewidth=2, label=f"{col} (historisch)")
-        plt.plot(forecast_index, forecast_median_charging[col], linestyle="--", linewidth=2, label=f"{col} (SARIMAX voorspelling)")
-        plt.fill_between(forecast_index, forecast_lower_charging[col], forecast_upper_charging[col], alpha=0.2)
+    # ---------- Interactieve selectie categorieën ----------
+    categorieen = st.multiselect(
+        "Kies brandstoftypes om te tonen",
+        options=maand_counts_charging.columns.tolist(),
+        default=maand_counts_charging.columns.tolist()
+    )
 
-    plt.title("Voertuigregistraties per brandstoftype — Historisch + SARIMAX-voorspelling tot 2030")
-    plt.xlabel("Jaar")
-    plt.ylabel("Aantal voertuigen")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    st.pyplot(plt)
+    # ---------- Plotly grafiek ----------
+    fig = go.Figure()
+
+    for col in categorieen:
+        # Historisch
+        fig.add_trace(go.Scatter(
+            x=cumul_hist_charging.index,
+            y=cumul_hist_charging[col],
+            mode="lines",
+            name=f"{col} (historisch)"
+        ))
+        # Voorspelling
+        fig.add_trace(go.Scatter(
+            x=forecast_index,
+            y=forecast_median_charging[col],
+            mode="lines",
+            line=dict(dash="dash"),
+            name=f"{col} (voorspelling)"
+        ))
+        # Onzekerheidsinterval
+        fig.add_trace(go.Scatter(
+            x=list(forecast_index) + list(forecast_index[::-1]),
+            y=list(forecast_lower_charging[col]) + list(forecast_upper_charging[col][::-1]),
+            fill="toself",
+            fillcolor="rgba(0,100,80,0.2)",
+            line=dict(color="rgba(255,255,255,0)"),
+            name=f"{col} onzekerheidsinterval",
+            showlegend=False
+        ))
+
+    fig.update_layout(
+        title=f"Voertuigregistraties per brandstoftype — Historisch + voorspelling tot {eindjaar}",
+        xaxis_title="Jaar",
+        yaxis_title="Aantal voertuigen",
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
