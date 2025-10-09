@@ -89,7 +89,6 @@ def get_all_laadpalen_nederland() -> pd.DataFrame:
     df = pd.json_normalize(data)
     return df
 
-# ✅ Dataframe inladen zodra de app start
 df_auto = load_data()
 
 
@@ -225,7 +224,6 @@ if page == "⚡️ Laadpalen":
             .reset_index()
         )
 
-        # ✅ Bereken percentages van totaal aantal laadpalen
         totaal = df_agg["Aantal_palen"].sum()
         df_agg["Percentage"] = (df_agg["Aantal_palen"] / totaal) * 100
         df_agg = df_agg.sort_values("Percentage", ascending=False)
@@ -318,7 +316,7 @@ elif page == "🚘 Voertuigen":
     data = data[data["Datum eerste toelating"].dt.year > 2010]
     data["Maand"] = data["Datum eerste toelating"].dt.to_period("M").dt.to_timestamp()
 
-    # --- 🔹 Keuzemenu voor merken ---
+    # ---  Keuzemenu voor merken ---
     alle_merknamen = sorted(data["Merk"].unique())
     geselecteerde_merknamen = st.multiselect(
         "*Selecteer automerken om te tonen:*",
@@ -326,7 +324,7 @@ elif page == "🚘 Voertuigen":
         default=[]  # begin met geen selectie
     )
 
-    # --- 🟡 Als geen merken geselecteerd: waarschuwing + alle merken gebruiken ---
+    # ---  Als geen merken geselecteerd: waarschuwing + alle merken gebruiken ---
     if not geselecteerde_merknamen:
         st.warning("⚠️ Geen merken geselecteerd. Alle merken worden getoond!")
         geselecteerde_merknamen = alle_merknamen
@@ -528,25 +526,24 @@ elif page == "📊 Voorspellend model":
             fit_tot = model_tot.fit(disp=False)
             pred_tot = fit_tot.get_forecast(steps=h).predicted_mean.values
         else:
-            # te weinig data: eenvoudige lineaire extrapolatie
+
             x = np.arange(len(totale_maand))
             m_tot, b_tot = np.polyfit(x, totale_maand, 1)
             future_x = np.arange(len(totale_maand), len(totale_maand) + h)
             pred_tot = b_tot + m_tot * future_x
     except Exception:
-        # fallback lineair
+
         x = np.arange(len(totale_maand))
         m_tot, b_tot = np.polyfit(x, totale_maand, 1)
         future_x = np.arange(len(totale_maand), len(totale_maand) + h)
         pred_tot = b_tot + m_tot * future_x
 
-    pred_tot = np.maximum(pred_tot, 0.0)  # geen negatieve aantallen
+    pred_tot = np.maximum(pred_tot, 0.0)  
     pred_tot_series = pd.Series(pred_tot, index=forecast_index)
 
-    # ---------- Marktaandeel-curves (zodat EV omhoog, fossiel omlaag) ----------
     types = maand_counts_charging.columns.tolist()
 
-    # huidige shares (laatste maand met data). als die nul zijn, gebruik gemiddelde laatste 12 maanden
+
     last_counts = maand_counts_charging.iloc[-1].astype(float)
     last_total = last_counts.sum()
     if last_total <= 0:
@@ -554,37 +551,35 @@ elif page == "📊 Voorspellend model":
         if last_12.sum() > 0:
             current_shares = (last_12 / last_12.sum()).to_dict()
         else:
-            # fallback gelijke verdeling
+
             current_shares = {t: 1.0/len(types) for t in types}
     else:
         current_shares = (last_counts / last_total).to_dict()
 
-    # bouw streefaandelen: we willen EV laten domineren in 2050, fossiel sterk verkleinen
     non_ev_targets = {}
     for t in types:
         if t == "Elektrisch":
             continue
         cur = current_shares.get(t, 0.0)
         if t == "Benzine":
-            non_ev_targets[t] = cur * 0.15   # benzine sterk verkleinen (naar ~15% van huidig)
+            non_ev_targets[t] = cur * 0.15   
         elif t == "Diesel":
-            non_ev_targets[t] = cur * 0.10   # diesel nog sterker omlaag
+            non_ev_targets[t] = cur * 0.10  
         else:
-            non_ev_targets[t] = cur * 0.25   # overige types matig omlaag
+            non_ev_targets[t] = cur * 0.25   
 
     sum_non_ev_targets = sum(non_ev_targets.values())
-    # geef EV de rest (zorg dat het tussen 0.75 en 0.98 blijft)
+
     ev_target = max(0.75, min(0.98, 1.0 - sum_non_ev_targets))
-    # als er geen 'Elektrisch' type in data: verdeel ev_target over anderen (geen EV in data)
+
     if "Elektrisch" not in types:
-        # verdeel ev_target proportioneel over niet-EV types (maar we willen toch dat fossiel daalt)
-        # we al hebben non_ev_targets; normaliseer naar 1
+
         scale = 1.0 / sum_non_ev_targets if sum_non_ev_targets > 0 else 1.0 / max(1, len(types))
         for t in non_ev_targets:
             non_ev_targets[t] = non_ev_targets[t] * scale
         ev_target = 0.0
 
-    # nu maak target dict per type
+
     targets = {}
     for t in types:
         if t == "Elektrisch":
@@ -592,44 +587,42 @@ elif page == "📊 Voorspellend model":
         else:
             targets[t] = non_ev_targets.get(t, 0.0)
 
-    # safety: als som targets != 1 door afronding, normalize licht
     total_target_sum = sum(targets.values())
     if total_target_sum <= 0:
-        # fallback: gelijke verdeling
+
         targets = {t: 1.0/len(types) for t in types}
     else:
         targets = {t: targets[t]/total_target_sum for t in types}
 
-    # bouw de sigmoid-curve over de horizon (t=0..1)
-    t_frac = np.linspace(0, 1, h)
-    k = 7.0  # steilheid; groter = snellere overgang
-    sigmoid = 1.0 / (1.0 + np.exp(-k*(t_frac - 0.5)))  # loopt van ~0 -> ~1
 
-    # share time-series: start bij current_shares, eindig bij targets, met sigmoid-vorm
+    t_frac = np.linspace(0, 1, h)
+    k = 7.0  
+    sigmoid = 1.0 / (1.0 + np.exp(-k*(t_frac - 0.5)))  
+
     share_dict = {}
     for t in types:
         cur = current_shares.get(t, 0.0)
         targ = targets.get(t, 0.0)
-        # zachte overgang: share(t) = cur + (targ - cur) * sigmoid(t)
+
         share_dict[t] = cur + (targ - cur) * sigmoid
 
     shares_df = pd.DataFrame(share_dict, index=forecast_index)
 
-    # normaliseer per rij zodat som precies 1 is (en corrigeer rijen met sum 0)
+
     row_sums = shares_df.sum(axis=1)
     zero_rows = row_sums == 0
     if zero_rows.any():
-        # vul deze rijen met huidige shares (genormaliseerd)
+
         fallback = pd.Series(current_shares)
         fallback = fallback / fallback.sum() if fallback.sum() > 0 else fallback.fillna(1.0/len(types))
         shares_df.loc[zero_rows, :] = fallback.values
         row_sums = shares_df.sum(axis=1)
     shares_df = shares_df.div(row_sums, axis=0)
 
-    # ---------- Verdeel totale voorspelling over types volgens shares ----------
+
     future_alloc = shares_df.multiply(pred_tot_series, axis=0)  # per maand counts per type
 
-    # ---------- Bouw cumulatieve voorspellingen per type ----------
+
     forecast_median_charging = pd.DataFrame(index=forecast_index, columns=types)
     for col in types:
         future_monthly = future_alloc[col].fillna(0).values
@@ -637,18 +630,18 @@ elif page == "📊 Voorspellend model":
         cumul_forecast = last_cumul + np.cumsum(np.maximum(future_monthly, 0.0))
         forecast_median_charging[col] = cumul_forecast
 
-    # ---------- Interactieve selectie categorieën ----------
+    # ----------  selectie categorieën ----------
     categorieen = st.multiselect(
         "Kies brandstoftypes om te tonen",
         options=maand_counts_charging.columns.tolist(),
         default=maand_counts_charging.columns.tolist()
     )
 
-    # ---------- Plotly grafiek (geen onzekerheidsinterval meer) ----------
+    # ---------- Plotly grafiek  ----------
     fig = go.Figure()
 
     for col in categorieen:
-        # Historisch (cumulatief)
+        # Historisch 
         fig.add_trace(go.Scatter(
             x=cumul_hist_charging.index,
             y=cumul_hist_charging[col],
@@ -656,7 +649,7 @@ elif page == "📊 Voorspellend model":
             name=f"{col} (historisch)",
             line=dict(width=2)
         ))
-        # Voorspelling (cumulatief)
+        # Voorspelling 
         fig.add_trace(go.Scatter(
             x=forecast_index,
             y=forecast_median_charging[col].astype(float),
@@ -670,7 +663,7 @@ elif page == "📊 Voorspellend model":
         xaxis_title="Jaar",
         yaxis_title="Aantal voertuigen (cumulatief)",
         hovermode="x unified",
-        height=720  # grotere grafiek
+        height=720  
     )
 
     st.plotly_chart(fig, use_container_width=True)
