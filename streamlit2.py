@@ -251,6 +251,7 @@ elif page == "🚘 Voertuigen":
 
     #-----Grafiek Lieke------
 
+
     # --- Functie om brandstoftype te bepalen ---
     def bepaal_type(merk, uitvoering):
         u = str(uitvoering).upper()
@@ -305,34 +306,28 @@ elif page == "🚘 Voertuigen":
     geselecteerde_merknamen = st.multiselect(
         "Selecteer automerken om te tonen:",
         options=alle_merknamen,
-        default=["VOLKSWAGEN", "AUDI", "BMW"]  # voorbeeld default selectie
+        default=[]  # begin met geen selectie
     )
 
+    # --- 🟡 Als geen merken geselecteerd: waarschuwing + alle merken gebruiken ---
+    if not geselecteerde_merknamen:
+        st.warning("⚠️ Geen merken geselecteerd. Alle merken worden getoond!")
+        geselecteerde_merknamen = alle_merknamen
+
     # Filter data op geselecteerde merken
-    if geselecteerde_merknamen:
-        data = data[data["Merk"].isin(geselecteerde_merknamen)]
+    data = data[data["Merk"].isin(geselecteerde_merknamen)]
 
     # --- Aggregatie ---
     maand_aantal = data.groupby(["Maand", "Type"]).size().unstack(fill_value=0)
     cumulatief = maand_aantal.cumsum()
 
-    # --- 📈 Grafiek ---
-    st.write("📊 Cumulatief aantal voertuigen per maand (gefilterd op geselecteerde merken):")
+    # --- 📈 Titel + Grafiek ---
+    st.markdown("## 📊 Cumulatief aantal voertuigen per maand (gefilterd op geselecteerde merken)")
     st.line_chart(cumulatief)
-
-    # --- Extra info ---
-    st.write("Geselecteerde merken:", geselecteerde_merknamen)
-    st.write("Beschikbare brandstofcategorieën:", data["Type"].unique())
-    st.write("Top merknamen na mapping:")
-    st.write(data["Merk"].value_counts())
-    st.write("Voorbeeld van cumulatieve data:")
-    st.write(cumulatief.head())
-
 
 
    #-------------Grafiek Ann---------
-    st.write("Analyseer laadsessies per uur en bekijk jaaroverzicht van totale geladen energie.")
-
+    
     # ---- Bestand vast instellen ----
     file_path = "Charging_data.pkl"
 
@@ -359,27 +354,43 @@ elif page == "🚘 Voertuigen":
         ev_data["year"] = ev_data["start_time"].dt.year
         ev_data = ev_data[ev_data["year"].notna()]
         ev_data["year"] = ev_data["year"].astype(int)
+        ev_data["weekday"] = ev_data["start_time"].dt.day_name()
+
+        energy_col = "energy_delivered [kwh]"
+
+        # ---- HEATMAP: Laadsessies per dag/uur ----
+        st.subheader("📊 Heatmap: Laadsessies per dag van de week en uur van de dag")
+        heatmap_data = ev_data.groupby(["weekday", "hour"]).size().reset_index(name="count")
+
+        # Zorg voor juiste volgorde van dagen
+        weekdays_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        heatmap_data["weekday"] = pd.Categorical(heatmap_data["weekday"], categories=weekdays_order, ordered=True)
+
+        fig_hm = px.density_heatmap(
+            heatmap_data,
+            x="hour",
+            y="weekday",
+            z="count",
+            color_continuous_scale="Blues",
+            title="Laadsessies (dag vs uur)"
+        )
+        fig_hm = force_integer_xaxis(fig_hm)
+        st.plotly_chart(fig_hm, use_container_width=True)
 
         # ---- FILTERS ----
         phase_options = ["Alle"] + [
             x for x in sorted(ev_data["n_phases"].dropna().unique()) if 0 <= x <= 6
         ]
-        phase_choice = st.selectbox("Filter op aantal fasen (N_phases)", phase_options)
-
-
+        phase_choice = st.selectbox("Filter op aantal fasen", phase_options)
 
         ev_filtered = ev_data.copy()
         if phase_choice != "Alle":
             ev_filtered = ev_filtered[ev_filtered["n_phases"] == phase_choice]
 
-
-        energy_col = "energy_delivered [kwh]"
-
         # ---- GRAFIEK 1: Laadsessies per uur van de dag ----
         st.subheader("Laadsessies per uur van de dag")
         hourly_counts = ev_filtered.groupby("hour").size().reset_index(name="Aantal laadsessies")
-        fig1 = px.bar(hourly_counts, x="hour", y="Aantal laadsessies",
-                    title="Aantal laadsessies per uur van de dag")
+        fig1 = px.bar(hourly_counts, x="hour", y="Aantal laadsessies")
         fig1 = force_integer_xaxis(fig1)
         st.plotly_chart(fig1, use_container_width=True)
 
@@ -388,20 +399,25 @@ elif page == "🚘 Voertuigen":
         energy_by_month = (
             ev_filtered.groupby("month")[energy_col].sum().reset_index().sort_values("month")
         )
-        fig2 = px.bar(energy_by_month, x="month", y=energy_col,
-                    title="Totaal geladen energie per maand")
+        fig2 = px.bar(energy_by_month, x="month", y=energy_col)
         fig2.update_xaxes(type='category')
         st.plotly_chart(fig2, use_container_width=True)
 
-        # ---- GRAFIEK 3: Totaal geladen energie per jaar ----
-        st.subheader("Totaal geladen energie per jaar")
-        energy_by_year = (
-            ev_filtered.groupby("year")[energy_col].sum().reset_index().sort_values("year")
+        # ---- GRAFIEK 3: Gemiddelde sessieduur per maand ----
+        st.subheader("Gemiddelde sessieduur per maand (uren)")
+        ev_filtered["session_duration"] = (ev_filtered["exit_time"] - ev_filtered["start_time"]).dt.total_seconds() / 3600
+        avg_duration = (
+            ev_filtered.groupby("month")["session_duration"].mean().reset_index().sort_values("month")
         )
-        fig3 = px.bar(energy_by_year, x="year", y=energy_col,
-                    title="Totaal geladen energie per jaar")
-        fig3 = force_integer_xaxis(fig3)
+        fig3 = px.line(avg_duration, x="month", y="session_duration", markers=True)
+        fig3.update_xaxes(type='category')
         st.plotly_chart(fig3, use_container_width=True)
+
+        # ---- GRAFIEK 4: Boxplot energie per sessie per maand ----
+        st.subheader("Verdeling van geladen energie per sessie per maand")
+        fig4 = px.box(ev_filtered, x="month", y=energy_col, points="all")
+        fig4.update_xaxes(type='category')
+        st.plotly_chart(fig4, use_container_width=True)
 
         # ---- DATA BEKIJKEN ----
         with st.expander("📊 Bekijk gebruikte data"):
