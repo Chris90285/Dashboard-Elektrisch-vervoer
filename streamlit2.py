@@ -99,9 +99,6 @@ df_auto = load_data()
 # ------------------- Pagina 1 --------------------------
 if page == "⚡️ Laadpalen":
     st.markdown("## Kaart laadpalen")
-    st.write("Op deze pagina is een kaart te zien met laadpalen in Nederland.")
-    st.write("Klik op een laadpaal voor meer informatie.")
-    st.write("Gebruik het dropdown menu om verschillende provincies te bekijken.")
     st.markdown("---")
 
     provincies = {
@@ -249,36 +246,23 @@ if page == "⚡️ Laadpalen":
 
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
-    st.markdown("##Elektrische Voertuigen & laadtijden")
-    st.write("Op deze pagina is informatie te vinden over elektrische auto's in Nederland.")
+    st.markdown("## Elektrische Voertuigen & laadtijden")
     st.markdown("---")
 
     #-----Grafiek Lieke------
 
-    # --- Functie om type te bepalen ---
+    # --- Functie om brandstoftype te bepalen ---
     def bepaal_type(merk, uitvoering):
         u = str(uitvoering).upper()
         m = str(merk).upper()
 
+        elektrische_prefixen = [
+            "FA1FA1CZ", "3EER", "3EDF", "3EDE", "2EER", "2EDF", "2EDE",
+            "E11", "0AW5", "QE2QE2G1", "QE1QE1G1", "HE1HE1G1", "FA1FA1MD"
+        ]
+
         # Elektrisch
-        if (
-            "BMW I" in m
-            or "PORSCHE" in m
-            or u.startswith("FA1FA1CZ")
-            or u.startswith("3EER")
-            or u.startswith("3EDF")
-            or u.startswith("3EDE")
-            or u.startswith("2EER")
-            or u.startswith("2EDF")
-            or u.startswith("2EDE")
-            or u.startswith("E11")
-            or u.startswith("0AW5")
-            or u.startswith("QE2QE2G1")
-            or u.startswith("QE1QE1G1")
-            or u.startswith("HE1HE1G1")
-            or "EV" in u
-            or "FA1FA1MD" in u
-        ):
+        if "BMW I" in m or "PORSCHE" in m or any(u.startswith(pref) for pref in elektrische_prefixen) or "EV" in u:
             return "Elektrisch"
 
         # Diesel
@@ -292,10 +276,20 @@ elif page == "🚘 Voertuigen":
     # --- Data inladen ---
     data = pd.read_csv("duitse_automerken_JA.csv")
 
+    # --- Merknamen normaliseren ---
+    merk_mapping = {
+        "VW": "VOLKSWAGEN",
+        "FAW-VOLKSWAGEN": "VOLKSWAGEN",
+        "VOLKSWAGEN/ZIMNY": "VOLKSWAGEN",
+        "BMW I": "BMW",
+        "FORD-CNG-TECHNIK": "FORD"
+    }
+    data["Merk"] = data["Merk"].str.upper().replace(merk_mapping)
+
     # --- Type bepalen ---
     data["Type"] = data.apply(lambda row: bepaal_type(row["Merk"], row["Uitvoering"]), axis=1)
 
-    # --- Datum verwerken ---
+    # --- Datumverwerking ---
     data["Datum eerste toelating"] = (
         data["Datum eerste toelating"].astype(str).str.split(".").str[0]
     )
@@ -306,16 +300,32 @@ elif page == "🚘 Voertuigen":
     data = data[data["Datum eerste toelating"].dt.year > 2010]
     data["Maand"] = data["Datum eerste toelating"].dt.to_period("M").dt.to_timestamp()
 
+    # --- 🔹 Keuzemenu voor merken ---
+    alle_merknamen = sorted(data["Merk"].unique())
+    geselecteerde_merknamen = st.multiselect(
+        "Selecteer automerken om te tonen:",
+        options=alle_merknamen,
+        default=["VOLKSWAGEN", "AUDI", "BMW"]  # voorbeeld default selectie
+    )
+
+    # Filter data op geselecteerde merken
+    if geselecteerde_merknamen:
+        data = data[data["Merk"].isin(geselecteerde_merknamen)]
+
     # --- Aggregatie ---
     maand_aantal = data.groupby(["Maand", "Type"]).size().unstack(fill_value=0)
     cumulatief = maand_aantal.cumsum()
 
-    # --- 📈 Grafiek tonen ---
-    st.write("Aantal voertuigen per maand (cumulatief):")
+    # --- 📈 Grafiek ---
+    st.write("📊 Cumulatief aantal voertuigen per maand (gefilterd op geselecteerde merken):")
     st.line_chart(cumulatief)
 
-    # --- Extra ---
-    st.write("Categorieën:", data["Type"].unique())
+    # --- Extra info ---
+    st.write("Geselecteerde merken:", geselecteerde_merknamen)
+    st.write("Beschikbare brandstofcategorieën:", data["Type"].unique())
+    st.write("Top merknamen na mapping:")
+    st.write(data["Merk"].value_counts())
+    st.write("Voorbeeld van cumulatieve data:")
     st.write(cumulatief.head())
 
 
@@ -404,11 +414,8 @@ elif page == "🚘 Voertuigen":
 # ------------------- Pagina 3 --------------------------
 elif page == "📊 Voorspellend model":
     st.markdown("## Voorspellend Model")
-    st.write("Gebruik deze pagina voor modellen en prognoses over laad- en voertuiggedrag.")
-    st.write("Hier is een voorspellend model te zien, wat de hoeveelheid type auto's voorspeld in Nederland.")
-    st.write("")
     st.markdown("---")
-    st.title("Voorspelling auto's in Nederland per brandstofcategorie")
+    st.subheader("Voorspelling auto's in Nederland per brandstofcategorie")
 
     #-------Voorspellend model Koen-------
 
