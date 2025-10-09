@@ -258,7 +258,7 @@ if page == "⚡️ Laadpalen":
         st.warning("Kon geen landelijke data laden voor de grafiek.")
     # ---- DATA BEKIJKEN ----
     with st.expander("📊 Bekijk gebruikte data (OpenChargeMap API)"):
-            st.dataframe(df)
+            st.dataframe(df_all)
 
 
 # ------------------- Pagina 2 --------------------------
@@ -676,4 +676,4 @@ elif page == "📊 Voorspellend model":
 
     # ---- DATA BEKIJKEN ----
     with st.expander("📊 Bekijk gebruikte data (cars.pkl opgeschoond)"):
-            st.dataframe(data)
+            st.dataframe(df_auto_kopie)
