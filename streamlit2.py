@@ -36,10 +36,10 @@ with st.sidebar:
     )
 
     st.write("")
-    st.info("🔋 OpenChargeMap Nederland API-data wordt per provincie geladen")
+    st.info("🔋 Data afkomstig van OpenChargeMap & RDW")
     st.markdown("---")
     st.write("Voor het laatst geüpdatet op:")
-    st.write("*07 okt 2025*")
+    st.write("*09 okt 2025*")
 
 
 # ------------------- Data inladen -----------------------
@@ -360,7 +360,7 @@ elif page == "🚘 Voertuigen":
         energy_col = "energy_delivered [kwh]"
 
         # ---- HEATMAP: Laadpatronen per dag en uur ----
-        st.subheader("📊 Heatmap: Laadpatronen per dag en uur")
+        st.subheader("Laadpatronen per dag en uur")
         heatmap_data = ev_data.groupby(["weekday", "hour"]).size().reset_index(name="count")
 
         # Zorg voor juiste volgorde van dagen
@@ -372,13 +372,11 @@ elif page == "🚘 Voertuigen":
             x="hour",
             y="weekday",
             z="count",
-            color_continuous_scale=[[0, "#1f77b4"], [0.5, "#ffff00"], [1, "#d62728"]],  # koel blauw -> geel -> rood
-            title="Laadpatronen (weekdag vs uur)"
-        )
+            color_continuous_scale = [[0.0, "#313695"],[0.5, "#ffffbf"],[1.0, "#a50026"]] )
         fig_hm = force_integer_xaxis(fig_hm)
 
         # Pas de kleurenschaal aan
-        fig_hm.update_coloraxes(colorbar_title="Laadgebruik", colorbar_title_side="top")
+        fig_hm.update_coloraxes(colorbar_title="Laadgebruik (%)", colorbar_title_side="top")
 
         st.plotly_chart(fig_hm, use_container_width=True)
 
@@ -651,26 +649,4 @@ elif page == "📊 Voorspellend model":
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # ---------- Extra: toon voorspelde marktaandelen in 2030/2040/2050 (optioneel) ----------
-    if st.checkbox("Toon geschatte marktaandelen (2030/2040/2050)"):
-        # vind rijen dicht bij die jaren in forecast_index
-        def nearest_row(year):
-            target = pd.Timestamp(f"{year}-01-01")
-            if target < forecast_index[0]:
-                idx = 0
-            else:
-                idx = np.argmin(np.abs((forecast_index - target).days))
-            return shares_df.iloc[idx]
 
-        cols = ["Type", "2030", "2040", str(eindjaar)]
-        rows = []
-        for t in types:
-            row = {
-                "Type": t,
-                "2030": f"{nearest_row(2030).get(t,0.0)*100:.1f}%",
-                "2040": f"{nearest_row(2040).get(t,0.0)*100:.1f}%",
-                str(eindjaar): f"{shares_df.iloc[-1].get(t,0.0)*100:.1f}%"
-            }
-            rows.append(row)
-        df_shares = pd.DataFrame(rows)
-        st.table(df_shares.set_index("Type"))
