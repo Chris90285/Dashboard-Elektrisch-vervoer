@@ -257,11 +257,48 @@ if page == "⚡️ Laadpalen":
     else:
         st.warning("Kon geen landelijke data laden voor de grafiek.")
     # ---- DATA BEKIJKEN ----
+    @st.cache_data(ttl=86400)
+    def get_laadpalen_data(lat: float, lon: float, radius: float) -> pd.DataFrame:
+        """Haalt laadpalen binnen een straal op via de OpenChargeMap API."""
+        url = "https://api.openchargemap.io/v3/poi/"
+        params = {
+            "output": "json",
+            "countrycode": "NL",
+            "latitude": lat,
+            "longitude": lon,
+            "distance": radius,
+            "maxresults": 5000,
+            "compact": True,
+            "verbose": False,
+            "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
+        }
+
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        # Maak DataFrame aan
+        Laadpalen_API = pd.json_normalize(data)
+
+
+
+        return Laadpalen_API
+
+
+    # -------------------------------------------------------
+    # 📊 Expander met gebruikte data
+    # -------------------------------------------------------
+    # Zet dit ONDERAAN je “⚡️ Laadpalen”-pagina (na de grafieken)
     with st.expander("📊 Bekijk gebruikte data (OpenChargeMap API)"):
-        if 'df_all' in locals() and not df_all.empty:
-            st.dataframe(df_all, use_container_width=True)
-        else:
-            st.warning("Geen data beschikbaar (API gaf geen resultaten terug).")
+        try:
+            if "Laadpalen_API" in locals() and not Laadpalen_API.empty:
+                st.caption(f"🔢 Aantal laadpalen opgehaald: {len(Laadpalen_API):,}")
+                st.dataframe(Laadpalen_API, use_container_width=True)
+            else:
+                st.warning("⚠️ Geen data beschikbaar (API gaf geen resultaten terug).")
+        except Exception as e:
+            st.error(f"Er is een fout opgetreden bij het tonen van de data: {e}")
+
 
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
