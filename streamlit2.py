@@ -256,27 +256,6 @@ if page == "⚡️ Laadpalen":
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("Kon geen landelijke data laden voor de grafiek.")
-
-    # ---- DATA BEKIJKEN ----
-    # -------------------------------------------------------
-    # 📊 Expander met gebruikte data (OpenChargeMap API)
-    # -------------------------------------------------------
-
-    # Gebruik de reeds opgehaalde data (df) uit het bovenliggende deel
-    # zodat er geen dubbele API-call of functie-definitie nodig is.
-
-    with st.expander("📊 Bekijk gebruikte data (OpenChargeMap API)"):
-        try:
-            # Controleer of de DataFrame 'df' bestaat en data bevat
-            if "df" in locals() and not df.empty:
-                st.caption(f"🔢 Aantal laadpalen opgehaald: {len(df):,}")
-                st.dataframe(df, use_container_width=True)
-            else:
-                st.warning("⚠️ Geen data beschikbaar (API gaf geen resultaten terug).")
-        except Exception as e:
-            st.error(f"Er is een fout opgetreden bij het tonen van de data: {e}")
-
-
 # ------------------- Pagina 2 --------------------------
 elif page == "🚘 Voertuigen":
     st.markdown("## Elektrische Voertuigen & laadtijden")
@@ -357,11 +336,6 @@ elif page == "🚘 Voertuigen":
     # --- 📈 Titel + Grafiek ---
     st.subheader("Cumulatief aantal voertuigen per maand")
     st.line_chart(cumulatief)
-
-    # ---- DATA BEKIJKEN ----
-    with st.expander("📊 Bekijk gebruikte data (cars.pkl opgeschoond)"):
-            st.dataframe(data)
-
 
    #-------------Grafiek Ann---------
 
@@ -690,6 +664,3 @@ elif page == "📊 Voorspellend model":
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # ---- DATA BEKIJKEN ----
-    with st.expander("📊 Bekijk gebruikte data (cars.pkl opgeschoond)"):
-            st.dataframe(df_auto_kopie)
