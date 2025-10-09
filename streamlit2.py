@@ -438,12 +438,28 @@ elif page == "📊 Voorspellend model":
     st.markdown("---")
     st.subheader("Voorspelling auto's in Nederland per brandstofcategorie")
 
+    import warnings
+    import plotly.graph_objects as go
     warnings.filterwarnings("ignore")
 
     # ---------- Interactieve instellingen ----------
-    eindjaar = st.sidebar.slider("Voorspellen tot jaar", 2025, 2040, 2030)
+    st.sidebar.markdown("Instellingen voorspelling")
+    eindjaar = st.sidebar.slider(
+        "Voorspellen tot jaar",
+        min_value=2025,
+        max_value=2050,
+        value=2030,
+        step=1,
+        help="Stel het jaar in tot waar de voorspelling loopt (bijvoorbeeld 2050: klimaatdoelen)."
+    )
     EINDDATUM = pd.Timestamp(f"{eindjaar}-12-01")
-    alpha = st.sidebar.selectbox("Onzekerheidsinterval", [0.05, 0.1, 0.2], format_func=lambda x: f"{int((1-x)*100)}%")
+
+    alpha = st.sidebar.selectbox(
+        "Onzekerheidsinterval",
+        [0.05, 0.1, 0.2],
+        index=0,
+        format_func=lambda x: f"{int((1-x)*100)}%"
+    )
 
     # ---------- Kopie gebruiken ----------
     df_auto_kopie = df_auto.copy()
@@ -497,6 +513,7 @@ elif page == "📊 Voorspellend model":
         y = maand_counts_charging[col].astype(float)
 
         if len(y) < 12:
+            st.warning(f"⚠ Te weinig data voor {col}, gebruik lineaire extrapolatie.")
             x = np.arange(len(y))
             m, b = np.polyfit(x, y, 1)
             future_x = np.arange(len(y), len(y) + h)
@@ -527,17 +544,10 @@ elif page == "📊 Voorspellend model":
         forecast_lower_charging[col] = cumul_lower
         forecast_upper_charging[col] = cumul_upper
 
-    # ---------- Interactieve selectie categorieën ----------
-    categorieen = st.multiselect(
-        "Kies brandstoftypes om te tonen",
-        options=maand_counts_charging.columns.tolist(),
-        default=maand_counts_charging.columns.tolist()
-    )
-
     # ---------- Plotly grafiek ----------
     fig = go.Figure()
 
-    for col in categorieen:
+    for col in maand_counts_charging.columns:
         # Historisch
         fig.add_trace(go.Scatter(
             x=cumul_hist_charging.index,
@@ -553,7 +563,7 @@ elif page == "📊 Voorspellend model":
             line=dict(dash="dash"),
             name=f"{col} (voorspelling)"
         ))
-        # Onzekerheidsinterval
+        # Bandbreedte
         fig.add_trace(go.Scatter(
             x=list(forecast_index) + list(forecast_index[::-1]),
             y=list(forecast_lower_charging[col]) + list(forecast_upper_charging[col][::-1]),
