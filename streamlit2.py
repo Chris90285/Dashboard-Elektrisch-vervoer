@@ -376,14 +376,15 @@ elif page == "🚘 Voertuigen":
 
         energy_col = "energy_delivered [kwh]"
 
-        # ---- INTERACTIEVE FILTERS ----
-        st.sidebar.header("🔍 Filters")
-        years = sorted(ev_data["year"].unique())
-        selected_years = st.sidebar.multiselect("Selecteer jaar", years, default=years)
+        # ---- WEEKDAGFILTER ----
+        st.subheader("🔍 Filter op weekdagen")
         weekdays_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        selected_days = st.sidebar.multiselect("Selecteer weekdagen", weekdays_order, default=weekdays_order)
-
-        ev_data = ev_data[ev_data["year"].isin(selected_years) & ev_data["weekday"].isin(selected_days)]
+        selected_days = st.multiselect(
+            "Selecteer één of meerdere weekdagen:",
+            weekdays_order,
+            default=weekdays_order,
+        )
+        ev_data = ev_data[ev_data["weekday"].isin(selected_days)]
 
         # ---- HEATMAP: Laadpatronen per dag en uur ----
         st.subheader("🔋 Laadpatronen per dag en uur")
@@ -396,15 +397,12 @@ elif page == "🚘 Voertuigen":
             y="weekday",
             z="count",
             color_continuous_scale=[[0.0, "#317595"], [0.5, "#fcffbf"], [1.0, "#c2242f"]],
-            hover_data={"count": True, "hour": True, "weekday": True}
         )
         fig_hm = force_integer_xaxis(fig_hm)
         fig_hm.update_coloraxes(colorbar_title="Aantal sessies", colorbar_title_side="top")
-        fig_hm.update_layout(hovermode="closest", margin=dict(l=40, r=40, t=40, b=40))
+        st.plotly_chart(fig_hm, use_container_width=True)
 
-        st.plotly_chart(fig_hm, use_container_width=True, config={"displayModeBar": True, "scrollZoom": True})
-
-        # ---- FILTERS ----
+        # ---- FILTER OP AANTAL FASEN ----
         phase_options = ["Alle"] + [x for x in sorted(ev_data["n_phases"].dropna().unique()) if 0 <= x <= 6]
         phase_choice = st.selectbox("**Filter op aantal fasen**", phase_options)
 
@@ -415,37 +413,40 @@ elif page == "🚘 Voertuigen":
         # ---- GRAFIEK 1: Laadsessies per uur van de dag ----
         st.subheader("⏰ Laadsessies per uur van de dag")
         hourly_counts = ev_filtered.groupby("hour").size().reset_index(name="Aantal laadsessies")
-        fig1 = px.bar(hourly_counts, x="hour", y="Aantal laadsessies", color="Aantal laadsessies",
-                    color_continuous_scale="Blues", hover_data={"hour": True, "Aantal laadsessies": True})
+        fig1 = px.bar(hourly_counts, x="hour", y="Aantal laadsessies")
         fig1 = force_integer_xaxis(fig1)
-        fig1.update_traces(hovertemplate="Uur %{x}: %{y} sessies")
-        st.plotly_chart(fig1, use_container_width=True, config={"displayModeBar": True, "scrollZoom": True})
+        st.plotly_chart(fig1, use_container_width=True)
 
         # ---- GRAFIEK 2: Totaal geladen energie per maand ----
         st.subheader("⚡ Totaal geladen energie per maand")
-        energy_by_month = ev_filtered.groupby(["year", "month"])[energy_col].sum().reset_index().sort_values("month")
-        fig2 = px.bar(energy_by_month, x="month", y=energy_col, color="year", barmode="group",
-                    hover_data={energy_col: ":.2f", "year": True})
-        fig2.update_xaxes(type='category')
-        fig2.update_layout(hovermode="x unified")
-        st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": True, "scrollZoom": True})
+        energy_by_month = ev_filtered.groupby("month")[energy_col].sum().reset_index().sort_values("month")
+
+        # Controleer aantal unieke maanden
+        unique_months = energy_by_month["month"].nunique()
+        st.caption(f"Aantal maanden in dataset: {unique_months}")
+
+        fig2 = px.bar(energy_by_month, x="month", y=energy_col)
+        fig2.update_xaxes(type="category", title_text="Maand")
+        fig2.update_yaxes(title_text="Totaal geladen energie (kWh)")
+        st.plotly_chart(fig2, use_container_width=True)
 
         # ---- GRAFIEK 3: Gemiddelde sessieduur per maand ----
         st.subheader("⏳ Gemiddelde sessieduur per maand (uren)")
         ev_filtered["session_duration"] = (ev_filtered["exit_time"] - ev_filtered["start_time"]).dt.total_seconds() / 3600
-        avg_duration = ev_filtered.groupby(["year", "month"])["session_duration"].mean().reset_index().sort_values("month")
-        fig3 = px.line(avg_duration, x="month", y="session_duration", color="year", markers=True,
-                    hover_data={"session_duration": ":.2f"})
-        fig3.update_xaxes(type='category')
-        fig3.update_traces(hovertemplate="Gem. duur %{y:.2f} uur")
-        st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": True, "scrollZoom": True})
+        avg_duration = (
+            ev_filtered.groupby("month")["session_duration"].mean().reset_index().sort_values("month")
+        )
+        fig3 = px.line(avg_duration, x="month", y="session_duration", markers=True)
+        fig3.update_xaxes(type="category", title_text="Maand")
+        fig3.update_yaxes(title_text="Gemiddelde sessieduur (uren)")
+        st.plotly_chart(fig3, use_container_width=True)
 
         # ---- GRAFIEK 4: Boxplot energie per sessie per maand ----
         st.subheader("📦 Verdeling van geladen energie per sessie per maand")
-        fig4 = px.box(ev_filtered, x="month", y=energy_col, color="year", points="all",
-                    hover_data={"month": True, energy_col: ":.2f"})
-        fig4.update_xaxes(type='category')
-        st.plotly_chart(fig4, use_container_width=True, config={"displayModeBar": True, "scrollZoom": True})
+        fig4 = px.box(ev_filtered, x="month", y=energy_col, points="all")
+        fig4.update_xaxes(type="category", title_text="Maand")
+        fig4.update_yaxes(title_text="Energie per sessie (kWh)")
+        st.plotly_chart(fig4, use_container_width=True)
 
         # ---- DATA BEKIJKEN ----
         with st.expander("📊 Bekijk gebruikte data"):
