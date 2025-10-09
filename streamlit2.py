@@ -441,9 +441,9 @@ elif page == "📊 Voorspellend model":
     warnings.filterwarnings("ignore")
 
     # ---------- Interactieve instellingen ----------
-    eindjaar = st.sidebar.slider("Voorspellen tot jaar", 2025, 2050, 2030)
+    eindjaar = st.slider("Voorspellen tot jaar", 2025, 2050, 2030)
     EINDDATUM = pd.Timestamp(f"{eindjaar}-12-01")
-    alpha = st.sidebar.selectbox("Onzekerheidsinterval", [0.05, 0.1, 0.2], format_func=lambda x: f"{int((1-x)*100)}%")
+    alpha = st.selectbox("Onzekerheidsinterval", [0.05, 0.1, 0.2], format_func=lambda x: f"{int((1-x)*100)}%")
 
     # ---------- Kopie gebruiken ----------
     df_auto_kopie = df_auto.copy()
