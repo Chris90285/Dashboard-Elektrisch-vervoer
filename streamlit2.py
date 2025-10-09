@@ -387,7 +387,7 @@ elif page == "🚘 Voertuigen":
         ev_data = ev_data[ev_data["weekday"].isin(selected_days)]
 
         # ---- HEATMAP: Laadpatronen per dag en uur ----
-        st.subheader("🔋 Laadpatronen per dag en uur")
+        st.subheader("Laadpatronen per dag en uur")
         heatmap_data = ev_data.groupby(["weekday", "hour"]).size().reset_index(name="count")
         heatmap_data["weekday"] = pd.Categorical(heatmap_data["weekday"], categories=weekdays_order, ordered=True)
 
@@ -411,14 +411,14 @@ elif page == "🚘 Voertuigen":
             ev_filtered = ev_filtered[ev_filtered["n_phases"] == phase_choice]
 
         # ---- GRAFIEK 1: Laadsessies per uur van de dag ----
-        st.subheader("⏰ Laadsessies per uur van de dag")
+        st.subheader("Laadsessies per uur van de dag")
         hourly_counts = ev_filtered.groupby("hour").size().reset_index(name="Aantal laadsessies")
         fig1 = px.bar(hourly_counts, x="hour", y="Aantal laadsessies")
         fig1 = force_integer_xaxis(fig1)
         st.plotly_chart(fig1, use_container_width=True)
 
         # ---- GRAFIEK 2: Totaal geladen energie per maand ----
-        st.subheader("⚡ Totaal geladen energie per maand")
+        st.subheader("Totaal geladen energie per maand")
         energy_by_month = ev_filtered.groupby("month")[energy_col].sum().reset_index().sort_values("month")
 
         # Controleer aantal unieke maanden
@@ -431,7 +431,7 @@ elif page == "🚘 Voertuigen":
         st.plotly_chart(fig2, use_container_width=True)
 
         # ---- GRAFIEK 3: Gemiddelde sessieduur per maand ----
-        st.subheader("⏳ Gemiddelde sessieduur per maand (uren)")
+        st.subheader("Gemiddelde sessieduur per maand (uren)")
         ev_filtered["session_duration"] = (ev_filtered["exit_time"] - ev_filtered["start_time"]).dt.total_seconds() / 3600
         avg_duration = (
             ev_filtered.groupby("month")["session_duration"].mean().reset_index().sort_values("month")
@@ -442,7 +442,7 @@ elif page == "🚘 Voertuigen":
         st.plotly_chart(fig3, use_container_width=True)
 
         # ---- GRAFIEK 4: Boxplot energie per sessie per maand ----
-        st.subheader("📦 Verdeling van geladen energie per sessie per maand")
+        st.subheader("Verdeling van geladen energie per sessie per maand")
         fig4 = px.box(ev_filtered, x="month", y=energy_col, points="all")
         fig4.update_xaxes(type="category", title_text="Maand")
         fig4.update_yaxes(title_text="Energie per sessie (kWh)")
