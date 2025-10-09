@@ -99,7 +99,7 @@ df_auto = load_data()
 
 # ------------------- Pagina 1 --------------------------
 if page == "⚡️ Laadpalen":
-    st.markdown("## Kaart laadpalen")
+    st.markdown("## Kaart Laadpalen Nederland")
     st.markdown("---")
 
     provincies = {
@@ -165,13 +165,11 @@ if page == "⚡️ Laadpalen":
         st_folium(m, width=900, height=650, returned_objects=["center", "zoom"])
 
     st.markdown("<small>**Bron: openchargemap.org**</small>", unsafe_allow_html=True)
-
+    #Grafiek verdeling laadpalen in nederland 
     st.markdown("---")
     st.markdown("## 📊 Verdeling laadpalen in Nederland")
 
     if len(df_all) > 0:
-        # ✅ Verbeterde parse_cost functie
-        # ✅ Verbeterde parse_cost functie + filtering
         def parse_cost(value):
             if isinstance(value, str):
                 if "free" in value.lower() or "gratis" in value.lower():
@@ -182,7 +180,6 @@ if page == "⚡️ Laadpalen":
 
         df_all["UsageCostClean"] = df_all["UsageCost"].apply(parse_cost)
 
-        # ✅ Onrealistische waarden uitsluiten (>2 €/kWh)
         df_all.loc[
             (df_all["UsageCostClean"] < 0) | (df_all["UsageCostClean"] > 2),
             "UsageCostClean"
@@ -226,23 +223,42 @@ if page == "⚡️ Laadpalen":
                 Gemiddelde_kosten=("UsageCostClean", "mean"),
             )
             .reset_index()
-            .sort_values("Aantal_palen", ascending=False)
         )
+
+        # ✅ Bereken percentages van totaal aantal laadpalen
+        totaal = df_agg["Aantal_palen"].sum()
+        df_agg["Percentage"] = (df_agg["Aantal_palen"] / totaal) * 100
+        df_agg = df_agg.sort_values("Percentage", ascending=False)
 
         keuze = st.selectbox(
             "📈 Kies welke verdeling je wilt zien:",
-            ["Aantal laadpalen per provincie", "Gemiddelde kosten per provincie"]
+            ["Verdeling laadpalen per provincie (%)", "Gemiddelde kosten per provincie"]
         )
 
-        if keuze == "Aantal laadpalen per provincie":
-            fig = px.bar(df_agg, x="Provincie", y="Aantal_palen", title="Aantal laadpalen per provincie")
+        if keuze == "Verdeling laadpalen per provincie (%)":
+            fig = px.bar(
+                df_agg,
+                x="Provincie",
+                y="Percentage",
+                title="Verdeling laadpalen per provincie (%)",
+                text=df_agg["Percentage"].apply(lambda x: f"{x:.1f}%")
+            )
+            fig.update_traces(textposition="outside")
+            fig.update_layout(yaxis_title="Percentage van totaal (%)")
         elif keuze == "Gemiddelde kosten per provincie":
-            fig = px.bar(df_agg, x="Provincie", y="Gemiddelde_kosten", title="Gemiddelde kosten per provincie (€ per kWh)")
+            fig = px.bar(
+                df_agg,
+                x="Provincie",
+                y="Gemiddelde_kosten",
+                title="Gemiddelde kosten per provincie (€ per kWh)"
+            )
+            fig.update_layout(yaxis_title="€ per kWh")
 
-        fig.update_layout(xaxis_title="Provincie", yaxis_title="", showlegend=False)
+        fig.update_layout(xaxis_title="Provincie", showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("Kon geen landelijke data laden voor de grafiek.")
+
 
 
 # ------------------- Pagina 2 --------------------------
@@ -305,7 +321,7 @@ elif page == "🚘 Voertuigen":
     # --- 🔹 Keuzemenu voor merken ---
     alle_merknamen = sorted(data["Merk"].unique())
     geselecteerde_merknamen = st.multiselect(
-        "Selecteer automerken om te tonen:",
+        "*Selecteer automerken om te tonen:*",
         options=alle_merknamen,
         default=[]  # begin met geen selectie
     )
@@ -328,6 +344,7 @@ elif page == "🚘 Voertuigen":
 
 
    #-------------Grafiek Ann---------
+
 
     # ---- Bestand vast instellen ----
     file_path = "Charging_data.pkl"
@@ -359,12 +376,18 @@ elif page == "🚘 Voertuigen":
 
         energy_col = "energy_delivered [kwh]"
 
-        # ---- HEATMAP: Laadpatronen per dag en uur ----
-        st.subheader("Laadpatronen per dag en uur")
-        heatmap_data = ev_data.groupby(["weekday", "hour"]).size().reset_index(name="count")
-
-        # Zorg voor juiste volgorde van dagen
+        # ---- INTERACTIEVE FILTERS ----
+        st.sidebar.header("🔍 Filters")
+        years = sorted(ev_data["year"].unique())
+        selected_years = st.sidebar.multiselect("Selecteer jaar", years, default=years)
         weekdays_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        selected_days = st.sidebar.multiselect("Selecteer weekdagen", weekdays_order, default=weekdays_order)
+
+        ev_data = ev_data[ev_data["year"].isin(selected_years) & ev_data["weekday"].isin(selected_days)]
+
+        # ---- HEATMAP: Laadpatronen per dag en uur ----
+        st.subheader("🔋 Laadpatronen per dag en uur")
+        heatmap_data = ev_data.groupby(["weekday", "hour"]).size().reset_index(name="count")
         heatmap_data["weekday"] = pd.Categorical(heatmap_data["weekday"], categories=weekdays_order, ordered=True)
 
         fig_hm = px.density_heatmap(
@@ -372,18 +395,17 @@ elif page == "🚘 Voertuigen":
             x="hour",
             y="weekday",
             z="count",
-            color_continuous_scale = [[0.0, "#317595"],[0.5, "#fcffbf"],[1.0, "#c2242f"]] )
+            color_continuous_scale=[[0.0, "#317595"], [0.5, "#fcffbf"], [1.0, "#c2242f"]],
+            hover_data={"count": True, "hour": True, "weekday": True}
+        )
         fig_hm = force_integer_xaxis(fig_hm)
+        fig_hm.update_coloraxes(colorbar_title="Aantal sessies", colorbar_title_side="top")
+        fig_hm.update_layout(hovermode="closest", margin=dict(l=40, r=40, t=40, b=40))
 
-        # Pas de kleurenschaal aan
-        fig_hm.update_coloraxes(colorbar_title="Laadgebruik (%)", colorbar_title_side="top")
-
-        st.plotly_chart(fig_hm, use_container_width=True)
+        st.plotly_chart(fig_hm, use_container_width=True, config={"displayModeBar": True, "scrollZoom": True})
 
         # ---- FILTERS ----
-        phase_options = ["Alle"] + [
-            x for x in sorted(ev_data["n_phases"].dropna().unique()) if 0 <= x <= 6
-        ]
+        phase_options = ["Alle"] + [x for x in sorted(ev_data["n_phases"].dropna().unique()) if 0 <= x <= 6]
         phase_choice = st.selectbox("**Filter op aantal fasen**", phase_options)
 
         ev_filtered = ev_data.copy()
@@ -391,36 +413,39 @@ elif page == "🚘 Voertuigen":
             ev_filtered = ev_filtered[ev_filtered["n_phases"] == phase_choice]
 
         # ---- GRAFIEK 1: Laadsessies per uur van de dag ----
-        st.subheader("Laadsessies per uur van de dag")
+        st.subheader("⏰ Laadsessies per uur van de dag")
         hourly_counts = ev_filtered.groupby("hour").size().reset_index(name="Aantal laadsessies")
-        fig1 = px.bar(hourly_counts, x="hour", y="Aantal laadsessies")
+        fig1 = px.bar(hourly_counts, x="hour", y="Aantal laadsessies", color="Aantal laadsessies",
+                    color_continuous_scale="Blues", hover_data={"hour": True, "Aantal laadsessies": True})
         fig1 = force_integer_xaxis(fig1)
-        st.plotly_chart(fig1, use_container_width=True)
+        fig1.update_traces(hovertemplate="Uur %{x}: %{y} sessies")
+        st.plotly_chart(fig1, use_container_width=True, config={"displayModeBar": True, "scrollZoom": True})
 
         # ---- GRAFIEK 2: Totaal geladen energie per maand ----
-        st.subheader("Totaal geladen energie per maand")
-        energy_by_month = (
-            ev_filtered.groupby("month")[energy_col].sum().reset_index().sort_values("month")
-        )
-        fig2 = px.bar(energy_by_month, x="month", y=energy_col)
+        st.subheader("⚡ Totaal geladen energie per maand")
+        energy_by_month = ev_filtered.groupby(["year", "month"])[energy_col].sum().reset_index().sort_values("month")
+        fig2 = px.bar(energy_by_month, x="month", y=energy_col, color="year", barmode="group",
+                    hover_data={energy_col: ":.2f", "year": True})
         fig2.update_xaxes(type='category')
-        st.plotly_chart(fig2, use_container_width=True)
+        fig2.update_layout(hovermode="x unified")
+        st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": True, "scrollZoom": True})
 
         # ---- GRAFIEK 3: Gemiddelde sessieduur per maand ----
-        st.subheader("Gemiddelde sessieduur per maand (uren)")
+        st.subheader("⏳ Gemiddelde sessieduur per maand (uren)")
         ev_filtered["session_duration"] = (ev_filtered["exit_time"] - ev_filtered["start_time"]).dt.total_seconds() / 3600
-        avg_duration = (
-            ev_filtered.groupby("month")["session_duration"].mean().reset_index().sort_values("month")
-        )
-        fig3 = px.line(avg_duration, x="month", y="session_duration", markers=True)
+        avg_duration = ev_filtered.groupby(["year", "month"])["session_duration"].mean().reset_index().sort_values("month")
+        fig3 = px.line(avg_duration, x="month", y="session_duration", color="year", markers=True,
+                    hover_data={"session_duration": ":.2f"})
         fig3.update_xaxes(type='category')
-        st.plotly_chart(fig3, use_container_width=True)
+        fig3.update_traces(hovertemplate="Gem. duur %{y:.2f} uur")
+        st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": True, "scrollZoom": True})
 
         # ---- GRAFIEK 4: Boxplot energie per sessie per maand ----
-        st.subheader("Verdeling van geladen energie per sessie per maand")
-        fig4 = px.box(ev_filtered, x="month", y=energy_col, points="all")
+        st.subheader("📦 Verdeling van geladen energie per sessie per maand")
+        fig4 = px.box(ev_filtered, x="month", y=energy_col, color="year", points="all",
+                    hover_data={"month": True, energy_col: ":.2f"})
         fig4.update_xaxes(type='category')
-        st.plotly_chart(fig4, use_container_width=True)
+        st.plotly_chart(fig4, use_container_width=True, config={"displayModeBar": True, "scrollZoom": True})
 
         # ---- DATA BEKIJKEN ----
         with st.expander("📊 Bekijk gebruikte data"):
@@ -428,6 +453,7 @@ elif page == "🚘 Voertuigen":
 
     except Exception as e:
         st.error(f"Er is een fout opgetreden bij het inlezen van `{file_path}`: {e}")
+
 
 # ------------------- Pagina 3 --------------------------
 elif page == "📊 Voorspellend model":
