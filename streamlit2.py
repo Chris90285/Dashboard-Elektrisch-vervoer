@@ -372,7 +372,7 @@ elif page == "🚘 Voertuigen":
             x="hour",
             y="weekday",
             z="count",
-            color_continuous_scale = [[0.0, "#313695"],[0.5, "#ffffbf"],[1.0, "#a50026"]] )
+            color_continuous_scale = [[0.0, "#317595"],[0.5, "#fcffbf"],[1.0, "#c2242f"]] )
         fig_hm = force_integer_xaxis(fig_hm)
 
         # Pas de kleurenschaal aan
@@ -384,7 +384,7 @@ elif page == "🚘 Voertuigen":
         phase_options = ["Alle"] + [
             x for x in sorted(ev_data["n_phases"].dropna().unique()) if 0 <= x <= 6
         ]
-        phase_choice = st.selectbox("Filter op aantal fasen", phase_options)
+        phase_choice = st.selectbox("**Filter op aantal fasen**", phase_options)
 
         ev_filtered = ev_data.copy()
         if phase_choice != "Alle":
