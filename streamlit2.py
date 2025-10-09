@@ -256,44 +256,21 @@ if page == "⚡️ Laadpalen":
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("Kon geen landelijke data laden voor de grafiek.")
+
     # ---- DATA BEKIJKEN ----
-    @st.cache_data(ttl=86400)
-    def get_laadpalen_data(lat: float, lon: float, radius: float) -> pd.DataFrame:
-        """Haalt laadpalen binnen een straal op via de OpenChargeMap API."""
-        url = "https://api.openchargemap.io/v3/poi/"
-        params = {
-            "output": "json",
-            "countrycode": "NL",
-            "latitude": lat,
-            "longitude": lon,
-            "distance": radius,
-            "maxresults": 5000,
-            "compact": True,
-            "verbose": False,
-            "key": "bbc1c977-6228-42fc-b6af-5e5f71be11a5"
-        }
-
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        data = response.json()
-
-        # Maak DataFrame aan
-        Laadpalen_API = pd.json_normalize(data)
-
-
-
-        return Laadpalen_API
-
-
     # -------------------------------------------------------
-    # 📊 Expander met gebruikte data
+    # 📊 Expander met gebruikte data (OpenChargeMap API)
     # -------------------------------------------------------
-    # Zet dit ONDERAAN je “⚡️ Laadpalen”-pagina (na de grafieken)
+
+    # Gebruik de reeds opgehaalde data (df) uit het bovenliggende deel
+    # zodat er geen dubbele API-call of functie-definitie nodig is.
+
     with st.expander("📊 Bekijk gebruikte data (OpenChargeMap API)"):
         try:
-            if "Laadpalen_API" in locals() and not Laadpalen_API.empty:
-                st.caption(f"🔢 Aantal laadpalen opgehaald: {len(Laadpalen_API):,}")
-                st.dataframe(Laadpalen_API, use_container_width=True)
+            # Controleer of de DataFrame 'df' bestaat en data bevat
+            if "df" in locals() and not df.empty:
+                st.caption(f"🔢 Aantal laadpalen opgehaald: {len(df):,}")
+                st.dataframe(df, use_container_width=True)
             else:
                 st.warning("⚠️ Geen data beschikbaar (API gaf geen resultaten terug).")
         except Exception as e:
